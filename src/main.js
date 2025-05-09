@@ -82,6 +82,7 @@ function initDB() {
       console.log('Database upgrade needed, creating object store');
       const db = event.target.result;
       if (!db.objectStoreNames.contains('mediaFiles')) {
+        // Object store will now hold { id: fileId, blob: File }
         db.createObjectStore('mediaFiles', { keyPath: 'id' });
         console.log('Object store created successfully');
       }
@@ -115,35 +116,120 @@ function initDB() {
   });
 };
 
-// Load data from IndexedDB
+// IndexedDB Blob Storage Helper Functions
+async function storeFileBlob(db, fileId, fileBlob) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error('Database not initialized for storeFileBlob');
+      return reject(new Error('Database not initialized'));
+    }
+    const transaction = db.transaction('mediaFiles', 'readwrite');
+    const store = transaction.objectStore('mediaFiles');
+    const request = store.put({ id: fileId, blob: fileBlob });
+    request.onsuccess = () => resolve();
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function retrieveFileBlob(db, fileId) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error('Database not initialized for retrieveFileBlob');
+      return reject(new Error('Database not initialized'));
+    }
+    const transaction = db.transaction('mediaFiles', 'readonly');
+    const store = transaction.objectStore('mediaFiles');
+    const request = store.get(fileId);
+    request.onsuccess = () => resolve(request.result ? request.result.blob : null);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function removeFileBlob(db, fileId) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error('Database not initialized for removeFileBlob');
+      return reject(new Error('Database not initialized'));
+    }
+    const transaction = db.transaction('mediaFiles', 'readwrite');
+    const store = transaction.objectStore('mediaFiles');
+    const request = store.delete(fileId);
+    request.onsuccess = () => resolve();
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function clearAllFileBlobs(db) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error('Database not initialized for clearAllFileBlobs');
+      return reject(new Error('Database not initialized'));
+    }
+    const transaction = db.transaction('mediaFiles', 'readwrite');
+    const store = transaction.objectStore('mediaFiles');
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// Local Storage Metadata Helper Functions
+const LOCAL_STORAGE_METADATA_KEY = 'localFilesAppMetadata';
+
+function getMetadataFromLocalStorage() {
+  try {
+    const metadataJson = localStorage.getItem(LOCAL_STORAGE_METADATA_KEY);
+    return metadataJson ? JSON.parse(metadataJson) : [];
+  } catch (error) {
+    console.error('Error reading metadata from Local Storage:', error);
+    return [];
+  }
+}
+
+function saveMetadataToLocalStorage(metadataArray) {
+  try {
+    // Ensure we don't store the actual file blob in local storage
+    const storableMetadata = metadataArray.map(file => {
+      const { file: blob, ...meta } = file; // eslint-disable-line no-unused-vars
+      return meta;
+    });
+    localStorage.setItem(LOCAL_STORAGE_METADATA_KEY, JSON.stringify(storableMetadata));
+  } catch (error) {
+    console.error('Error saving metadata to Local Storage:', error);
+    if (error.name === 'QuotaExceededError') {
+      alert('Local Storage quota exceeded. Cannot save file list. Please clear some browser data.');
+    }
+  }
+}
+
+// Load data (Refactored)
 const loadData = async () => {
   try {
     isLoading.val = true;
-    console.log('Loading data from IndexedDB...');
+    console.log('Loading data...');
     const db = await initDB();
-    const transaction = db.transaction('mediaFiles', 'readonly');
-    const store = transaction.objectStore('mediaFiles');
-    const request = store.getAll();
+    const metadataArray = getMetadataFromLocalStorage();
+    console.log(`Loaded ${metadataArray.length} metadata entries from Local Storage.`);
 
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => {
-        const result = request.result || [];
-        console.log(`Loaded ${result.length} files from IndexedDB`);
+    const filesWithBlobs = [];
+    for (const meta of metadataArray) {
+      try {
+        const blob = await retrieveFileBlob(db, meta.id);
+        if (blob) {
+          filesWithBlobs.push({ ...meta, file: blob });
+        } else {
+          console.warn(`Blob not found in IndexedDB for file ID: ${meta.id}. Skipping file.`);
+        }
+      } catch (error) {
+        console.error(`Error loading blob for file ID ${meta.id}:`, error);
+      }
+    }
 
-        // Force a new array to trigger reactivity
-        mediaFiles.val = [...result];
-        console.log('Updated mediaFiles state');
+    mediaFiles.val = [...filesWithBlobs]; // Force reactivity
+    console.log(`Updated mediaFiles state with ${filesWithBlobs.length} files.`);
+    isLoading.val = false;
+    return mediaFiles.val;
 
-        isLoading.val = false;
-        resolve(mediaFiles.val);
-      };
-
-      request.onerror = (event) => {
-        console.error('Error loading data:', event.target.error);
-        isLoading.val = false;
-        reject(event.target.error);
-      };
-    });
   } catch (error) {
     console.error('Error in loadData:', error);
     isLoading.val = false;
@@ -151,61 +237,20 @@ const loadData = async () => {
   }
 };
 
-// Save data to IndexedDB
+// Save data to IndexedDB - THIS FUNCTION WILL BE REMOVED
+/*
 const saveData = async (data) => {
   try {
-    console.log(`Saving ${data.length} items to IndexedDB`);
-    const db = await initDB();
-    const transaction = db.transaction('mediaFiles', 'readwrite');
-    const store = transaction.objectStore('mediaFiles');
-
-    // Clear existing records
-    const clearRequest = store.clear();
-    clearRequest.onsuccess = () => console.log('Object store cleared successfully');
-    clearRequest.onerror = (e) => console.error('Failed to clear store:', e.target.error);
-
-    // Add new records one by one with confirmation
-    let successCount = 0;
-
-    for (const item of data) {
-      const request = store.add(item);
-      request.onsuccess = () => {
-        successCount++;
-        console.log(`Item ${successCount}/${data.length} saved`);
-      };
-      request.onerror = (e) => {
-        console.error(`Failed to save item ${item.id}:`, e.target.error);
-        if (e.target.error.name === 'QuotaExceededError') {
-          alert('Storage quota exceeded. Cannot save all files.');
-          transaction.abort();
-        }
-      };
-    }
-
-    return new Promise((resolve, reject) => {
-      transaction.oncomplete = () => {
-        console.log('All items saved to IndexedDB successfully');
-        resolve(true);
-      };
-
-      transaction.onerror = (event) => {
-        console.error('Error during transaction:', event.target.error);
-        reject(event.target.error);
-      };
-
-      transaction.onabort = (event) => {
-        console.warn('Transaction was aborted:', event);
-        reject(new Error('Transaction was aborted'));
-      };
-    });
+// ... existing code ...
   } catch (error) {
     console.error('Error in saveData:', error);
     return false;
   }
 };
+*/
 
-// Much simpler file handling function
-function addFiles(files) {
+// Much simpler file handling function (Refactored)
+async function addFiles(files) { // Made async
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
 
   if (!files || files.length === 0) {
@@ -218,8 +263,9 @@ function addFiles(files) {
 
   // Create temporary array
   let newFiles = [];
+  const db = await initDB(); // Initialize DB connection once
 
-  // Process each file synchronously
+  // Process each file
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
@@ -244,8 +290,16 @@ function addFiles(files) {
       dateAdded: new Date().toISOString()
     };
 
-    // Add to our array
-    newFiles.push(newFile);
+    // Store the blob in IndexedDB
+    try {
+      await storeFileBlob(db, newFile.id, newFile.file);
+      console.log(`Blob for ${newFile.name} stored in IndexedDB.`);
+      newFiles.push(newFile); // Add to array only if blob storage is successful
+    } catch (error) {
+      console.error(`Failed to store blob for ${newFile.name}:`, error);
+      alert(`Could not save file ${newFile.name} due to a storage error.`);
+      continue; // Skip this file
+    }
     console.log(`File ${file.name} processed successfully`);
   }
 
@@ -253,9 +307,12 @@ function addFiles(files) {
   if (newFiles.length > 0) {
     console.log(`Adding ${newFiles.length} files to the library`);
 
-    // Create a new array to ensure reactivity
     const updatedFiles = [...mediaFiles.val, ...newFiles];
     mediaFiles.val = updatedFiles;
+
+    // Save metadata to Local Storage
+    saveMetadataToLocalStorage(updatedFiles);
+    console.log('File metadata saved to Local Storage.');
 
     // Open the sidebar
     sidebarOpen.val = true;
@@ -350,14 +407,29 @@ function playFile(file) {
 };
 
 // Make sure to release URLs when files are deleted
-function deleteFile(id) {
+async function deleteFile(id) { // Made async
   console.log(`Deleting file with ID: ${id}`);
 
   // Release any object URL for this file
   releaseObjectURL(id);
 
+  // Remove blob from IndexedDB
+  try {
+    const db = await initDB();
+    await removeFileBlob(db, id);
+    console.log(`Blob for file ID ${id} removed from IndexedDB.`);
+  } catch (error) {
+    console.error(`Failed to remove blob for file ID ${id} from IndexedDB:`, error);
+    // Decide if we should proceed with metadata removal or alert user
+  }
+
   // Remove from state
-  mediaFiles.val = mediaFiles.val.filter(file => file.id !== id);
+  const updatedFiles = mediaFiles.val.filter(file => file.id !== id);
+  mediaFiles.val = updatedFiles;
+
+  // Update metadata in Local Storage
+  saveMetadataToLocalStorage(updatedFiles);
+  console.log('File metadata updated in Local Storage after deletion.');
 };
 
 function deleteAllFiles() {
@@ -365,14 +437,29 @@ function deleteAllFiles() {
   confirmDialog.showModal();
 };
 
-function confirmDeleteAll() {
+async function confirmDeleteAll() { // Made async
   // Release all object URLs
   objectUrls.forEach((url, id) => {
     URL.revokeObjectURL(url);
   });
   objectUrls.clear();
 
-  // Clear files array
+  // Clear blobs from IndexedDB
+  try {
+    const db = await initDB();
+    await clearAllFileBlobs(db);
+    console.log('All file blobs cleared from IndexedDB.');
+  } catch (error) {
+    console.error('Failed to clear all file blobs from IndexedDB:', error);
+    alert('Could not clear all stored file data. Please try again.');
+    // Potentially do not proceed with clearing metadata if blob clearing fails
+  }
+
+  // Clear metadata from Local Storage
+  saveMetadataToLocalStorage([]);
+  console.log('File metadata cleared from Local Storage.');
+
+  // Clear files array in memory
   mediaFiles.val = [];
   document.getElementById('confirm-dialog').close();
 };
@@ -382,9 +469,14 @@ function cancelDeleteAll() {
 };
 
 function updateProgress(id, currentTime) {
-  mediaFiles.val = mediaFiles.val.map(file =>
+  const updatedFiles = mediaFiles.val.map(file =>
     file.id === id ? { ...file, progress: currentTime } : file
   );
+  mediaFiles.val = updatedFiles;
+
+  // Update metadata in Local Storage
+  saveMetadataToLocalStorage(updatedFiles);
+  // console.log('File metadata updated in Local Storage after progress update.'); // Optional: can be noisy
 };
 
 // Components
@@ -468,17 +560,17 @@ function Header() {
             accept: 'audio/*,video/*',
             multiple: true,
             style: 'display: none',
-            onchange: (e) => {
+            onchange: async (e) => {
               try {
                 if (e.target.files && e.target.files.length > 0) {
-                  addFiles(e.target.files);
+                  await addFiles(e.target.files);
                   console.log(`Selected ${e.target.files.length} files`);
                 } else {
                   console.log('No files selected');
                 }
                 e.target.value = ''; // Reset input to allow selecting the same file again
               } catch (error) {
-                console.error('Error in file input change handler:', error);
+                console.error('Error in file input change handler (or during addFiles):', error);
                 alert('Failed to process selected files. Please try again.');
               }
             }
@@ -582,28 +674,25 @@ function App() {
 
 // Initialize app
 (async () => {
-  // Clear IndexedDB in development mode
+  // Clear IndexedDB and LocalStorage in development mode
   const isDevelopment = import.meta.env.DEV;
 
+  /* Commenting out development mode data clearing for now
   if (isDevelopment) {
-    console.log('Development mode detected - clearing all stored files');
+    console.log('Development mode detected - clearing all stored data');
     try {
       const db = await initDB();
-      const transaction = db.transaction('mediaFiles', 'readwrite');
-      const store = transaction.objectStore('mediaFiles');
+      await clearAllFileBlobs(db); // Clear blobs from IDB
+      console.log('All file blobs cleared for development mode');
+      
+      saveMetadataToLocalStorage([]); // Clear metadata from Local Storage
+      console.log('All file metadata cleared from Local Storage for development mode');
 
-      const clearRequest = store.clear();
-      clearRequest.onsuccess = () => console.log('All files cleared for development mode');
-      clearRequest.onerror = (e) => console.error('Failed to clear files in dev mode:', e.target.error);
-
-      await new Promise((resolve, reject) => {
-        transaction.oncomplete = resolve;
-        transaction.onerror = reject;
-      });
     } catch (error) {
-      console.error('Error clearing files in development mode:', error);
+      console.error('Error clearing data in development mode:', error);
     }
   }
+  */
 
   try {
     // Force isLoading to be true at start
