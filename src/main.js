@@ -537,9 +537,8 @@ function Header() {
         ),
         li(
           a({ href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
-  img({ src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png", alt: "GitHub", style: "height: 20px;" })
-)
-      ),
+  img({ src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png", alt: "GitHub", style: "height: 20px;" }))
+      )),
       ul(
         li(
           label({ class: 'upload-btn', for: 'file-upload' }, "Upload Files"),
