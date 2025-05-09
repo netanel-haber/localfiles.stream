@@ -303,5 +303,5 @@ dialog::backdrop {
 }
 
 img {
-  margin-top: -6px;
+  margin: -6px auto 0;
 }
