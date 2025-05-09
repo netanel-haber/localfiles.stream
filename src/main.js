@@ -31,7 +31,7 @@ const isLoading = van.state(true);
 const objectUrls = new Map();
 
 // Function to create and track object URLs
-const createAndTrackObjectURL = (file) => {
+function createAndTrackObjectURL(file) {
   // Check if we already have an URL for this file
   if (objectUrls.has(file.id)) {
     return objectUrls.get(file.id);
@@ -45,7 +45,7 @@ const createAndTrackObjectURL = (file) => {
 };
 
 // Function to release object URLs
-const releaseObjectURL = (fileId) => {
+function releaseObjectURL(fileId) {
   if (objectUrls.has(fileId)) {
     const url = objectUrls.get(fileId);
     URL.revokeObjectURL(url);
@@ -55,7 +55,7 @@ const releaseObjectURL = (fileId) => {
 };
 
 // Initialize IndexedDB
-const initDB = () => {
+function initDB() {
   return new Promise((resolve, reject) => {
     // Check for storage availability first
     if (!('indexedDB' in window)) {
@@ -205,7 +205,7 @@ const saveData = async (data) => {
 };
 
 // Much simpler file handling function
-const addFiles = (files) => {
+function addFiles(files) {
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
 
   if (!files || files.length === 0) {
@@ -273,7 +273,7 @@ const addFiles = (files) => {
 };
 
 // Add a dedicated function to play files
-const playFile = (file) => {
+function playFile(file) {
   console.log(`Attempting to play file:`, file);
 
   try {
@@ -350,7 +350,7 @@ const playFile = (file) => {
 };
 
 // Make sure to release URLs when files are deleted
-const deleteFile = (id) => {
+function deleteFile(id) {
   console.log(`Deleting file with ID: ${id}`);
 
   // Release any object URL for this file
@@ -360,12 +360,12 @@ const deleteFile = (id) => {
   mediaFiles.val = mediaFiles.val.filter(file => file.id !== id);
 };
 
-const deleteAllFiles = () => {
+function deleteAllFiles() {
   const confirmDialog = document.getElementById('confirm-dialog');
   confirmDialog.showModal();
 };
 
-const confirmDeleteAll = () => {
+function confirmDeleteAll() {
   // Release all object URLs
   objectUrls.forEach((url, id) => {
     URL.revokeObjectURL(url);
@@ -377,18 +377,18 @@ const confirmDeleteAll = () => {
   document.getElementById('confirm-dialog').close();
 };
 
-const cancelDeleteAll = () => {
+function cancelDeleteAll() {
   document.getElementById('confirm-dialog').close();
 };
 
-const updateProgress = (id, currentTime) => {
+function updateProgress(id, currentTime) {
   mediaFiles.val = mediaFiles.val.map(file =>
     file.id === id ? { ...file, progress: currentTime } : file
   );
 };
 
 // Components
-const Sidebar = () => {
+function Sidebar() {
   return aside({
     class: van.derive(() => `sidebar ${sidebarOpen.val ? 'open' : ''}`),
     'aria-label': 'File sidebar'
@@ -446,7 +446,7 @@ const Sidebar = () => {
   );
 };
 
-const Header = () => {
+function Header() {
   return header({},
     nav({ class: 'container-fluid' },
       ul(
@@ -490,7 +490,7 @@ const Header = () => {
   );
 };
 
-const MediaPlayer = () => {
+function MediaPlayer() {
   return div({ class: 'media-container' },
     div({ class: 'player-wrapper' },
       div({
@@ -554,7 +554,7 @@ const MediaPlayer = () => {
   );
 };
 
-const ConfirmDialog = () => {
+function ConfirmDialog() {
   return dialog({ id: 'confirm-dialog' },
     div({ class: 'dialog-content' },
       h2({}, "Confirm Deletion"),
@@ -568,7 +568,7 @@ const ConfirmDialog = () => {
 };
 
 // Main App
-const App = () => {
+function App() {
   return div({ id: 'layout' },
     Header(),
     div({ class: 'content' },
