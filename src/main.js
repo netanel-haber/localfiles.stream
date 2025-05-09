@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-const { div, header, main, aside, h1, h2, button, input, label, span, dialog, nav, ul, li, p } = van.tags;
+const { div, header, main, aside, h1, h2, button, input, label, span, dialog, nav, ul, li, p, a } = van.tags;
 
 // App state using IndexedDB
 const mediaFiles = van.state([]);
@@ -534,7 +534,11 @@ function Header() {
         ),
         li(
           h1({}, "localfiles.stream")
-        )
+        ),
+        li(
+          a({ href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
+  img({ src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png", alt: "GitHub", style: "height: 20px;" })
+)
       ),
       ul(
         li(
