@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-const { div, header, main, aside, h1, h2, button, input, label, span, dialog, nav, ul, li, p, a } = van.tags;
+const { div, header, main, aside, h1, h2, button, input, label, span, dialog, nav, ul, li, p, a, img } = van.tags;
 
 // App state using IndexedDB
 const mediaFiles = van.state([]);
