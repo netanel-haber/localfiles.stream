@@ -28,14 +28,14 @@ body {
 /* Header styling */
 header {
   background-color: var(--surface-color);
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   z-index: 2;
 }
 
 header h1 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
