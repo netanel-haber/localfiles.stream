@@ -711,30 +711,3 @@ function App() {
     isLoading.val = false;
   }
 })();
-
-// Add a CSS class for the upload indicator
-document.addEventListener('DOMContentLoaded', () => {
-  const style = document.createElement('style');
-  style.textContent = `
-    body.is-uploading::after {
-      content: "Uploading...";
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: #2196F3;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 4px;
-      z-index: 9999;
-      animation: pulse 1.5s infinite;
-    }
-    
-    @keyframes pulse {
-      0% { opacity: 0.6; }
-      50% { opacity: 1; }
-      100% { opacity: 0.6; }
-    }
-  `;
-  document.head.appendChild(style);
-});
-
