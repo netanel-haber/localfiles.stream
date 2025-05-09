@@ -301,3 +301,7 @@ dialog::backdrop {
     opacity: 1;
   }
 }
+
+img {
+  margin-top: -3px;
+}
