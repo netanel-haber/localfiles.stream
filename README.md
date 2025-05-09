@@ -1,3 +1,5 @@
+Embarrassingly or not, this was a successful vibe-ish coding experiment with cursor.
+
 # localfiles.stream
 
 A minimalistic, offline-first PWA for playing local audio and video files, with playback progress.
