@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@picocss/pico": "^2.1.1",
     "vanjs-core": "^1.5.5",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^1.0.0"
