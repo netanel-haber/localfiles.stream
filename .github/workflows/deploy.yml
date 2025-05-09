@@ -1,0 +1,37 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to push to gh-pages branch
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22' # Specify your Node.js version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build application
+        run: npm run build # This uses the "build": "vite build" script from your package.json
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist # Vite's default output directory
+          # Optional: if your repository name is something like <username>/<repo-name>
+          # and you are deploying to <username>.github.io/<repo-name>,
+          # you might need to set the base path in your vite.config.js
+          # and potentially here if you are not using a custom domain.
+          # cname: your.custom.domain.com # If you have a custom domain 
