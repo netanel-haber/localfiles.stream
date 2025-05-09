@@ -237,17 +237,6 @@ const loadData = async () => {
   }
 };
 
-// Save data to IndexedDB - THIS FUNCTION WILL BE REMOVED
-/*
-const saveData = async (data) => {
-  try {
-// ... existing code ...
-  } catch (error) {
-    console.error('Error in saveData:', error);
-    return false;
-  }
-};
-*/
 
 // Much simpler file handling function (Refactored)
 async function addFiles(files) { // Made async
@@ -388,16 +377,14 @@ function playFile(file) {
       if (playPromise !== undefined) {
         playPromise.then(() => {
           console.log(`Playing ${file.name || 'file'} successfully`);
-        }).catch(err => {
-          console.error('Error playing media:', err);
-          // Many browsers require user interaction to play media
-          if (confirm(`Click OK to play ${file.name || 'file'}`)) {
-            player.play().catch(e => {
-              console.error('Second play attempt failed:', e);
-              alert('Could not play media. Please try clicking directly on the player.');
-            });
+          // Store this as the last played file
+          try {
+            localStorage.setItem('lastPlayedFileId', file.id);
+            console.log(`Set lastPlayedFileId to: ${file.id}`);
+          } catch (e) {
+            console.warn('Could not save lastPlayedFileId to Local Storage:', e);
           }
-        });
+        }).catch(console.error);
       }
     }, 300);
 
@@ -708,6 +695,25 @@ function App() {
     await loadData();
 
     console.log(`App initialized with ${mediaFiles.val.length} files`);
+
+    // Attempt to play the last played file
+    if (mediaFiles.val.length > 0) {
+      try {
+        const lastPlayedFileId = localStorage.getItem('lastPlayedFileId');
+        if (lastPlayedFileId) {
+          console.log(`Found lastPlayedFileId: ${lastPlayedFileId}`);
+          const fileToPlay = mediaFiles.val.find(f => f.id === lastPlayedFileId);
+          if (fileToPlay) {
+            console.log('Attempting to autoplay last played file:', fileToPlay);
+            playFile(fileToPlay);
+          } else {
+            console.log('Last played file ID found, but file not in current media list.');
+          }
+        }
+      } catch (e) {
+        console.warn('Could not retrieve or play lastPlayedFileId:', e);
+      }
+    }
 
     // Make sure UI is updated
     if (mediaFiles.val.length > 0) {
