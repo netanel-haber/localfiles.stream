@@ -240,7 +240,7 @@ const loadData = async () => {
 
 // Much simpler file handling function (Refactored)
 async function addFiles(files) { // Made async
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
+  const MAX_FILE_SIZE = 1000 * 1024 * 1024; // 1000MB limit
 
   if (!files || files.length === 0) {
     console.error('No files selected');
@@ -261,7 +261,7 @@ async function addFiles(files) { // Made async
 
     // Skip files that are too large
     if (file.size > MAX_FILE_SIZE) {
-      alert(`File ${file.name} exceeds the 50MB size limit.`);
+      alert(`File ${file.name} exceeds the 1000MB size limit.`);
       continue;
     }
 
