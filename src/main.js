@@ -251,7 +251,7 @@ async function addFiles(files) { // Made async
   document.body.className = document.body.className.replace('is-uploading', '');
 
   // Create temporary array
-  let newFiles = [];
+  const newFiles = [];
   const db = await initDB(); // Initialize DB connection once
 
   // Process each file
@@ -464,7 +464,6 @@ function updateProgress(id, currentTime) {
 
   // Update metadata in Local Storage
   saveMetadataToLocalStorage(updatedFiles);
-  // console.log('File metadata updated in Local Storage after progress update.'); // Optional: can be noisy
 };
 
 // Components
@@ -663,23 +662,6 @@ function App() {
   // Clear IndexedDB and LocalStorage in development mode
   const isDevelopment = import.meta.env.DEV;
 
-  /* Commenting out development mode data clearing for now
-  if (isDevelopment) {
-    console.log('Development mode detected - clearing all stored data');
-    try {
-      const db = await initDB();
-      await clearAllFileBlobs(db); // Clear blobs from IDB
-      console.log('All file blobs cleared for development mode');
-      
-      saveMetadataToLocalStorage([]); // Clear metadata from Local Storage
-      console.log('All file metadata cleared from Local Storage for development mode');
-
-    } catch (error) {
-      console.error('Error clearing data in development mode:', error);
-    }
-  }
-  */
-
   try {
     // Force isLoading to be true at start
     isLoading.val = true;
@@ -751,26 +733,6 @@ document.addEventListener('DOMContentLoaded', () => {
       0% { opacity: 0.6; }
       50% { opacity: 1; }
       100% { opacity: 0.6; }
-    }
-    
-    .upload-success-message {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #4CAF50;
-      color: white;
-      padding: 10px 20px;
-      border-radius: 4px;
-      z-index: 9999;
-      animation: fadeInOut 3s forwards;
-    }
-    
-    @keyframes fadeInOut {
-      0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
-      10% { opacity: 1; transform: translateX(-50%) translateY(0); }
-      90% { opacity: 1; transform: translateX(-50%) translateY(0); }
-      100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
     }
   `;
   document.head.appendChild(style);
