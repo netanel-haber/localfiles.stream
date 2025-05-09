@@ -701,11 +701,6 @@ function App() {
     // Make sure UI is updated
     if (mediaFiles.val.length > 0) {
       console.log('Files found, showing sidebar');
-      // Force sidebar open on mobile if files exist
-      const isMobile = window.innerWidth < 768;
-      if (isMobile) {
-        sidebarOpen.val = true;
-      }
     }
   } catch (error) {
     console.error('Error initializing app:', error);
