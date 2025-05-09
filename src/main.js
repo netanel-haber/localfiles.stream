@@ -474,8 +474,6 @@ function Sidebar() {
   },
     h2({}, "Your Files"),
     van.derive(() => {
-      console.log(`Rendering sidebar with ${mediaFiles.val.length} files`);
-
       if (isLoading.val) {
         return div({ class: 'loading-message' }, "Loading files...");
       }

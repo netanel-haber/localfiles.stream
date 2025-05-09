@@ -12,68 +12,7 @@
 </head>
 
 <body>
-  <div id="app">
-    <div id="layout">
-      <header>
-        <nav class="container-fluid">
-          <ul>
-            <li>
-              <button id="hamburger-button" class="hamburger outline" aria-label="Toggle sidebar">☰</button>
-            </li>
-            <li>
-              <h1>localfiles.stream</h1>
-            </li>
-          </ul>
-          <ul>
-            <li>
-              <label class="upload-btn" for="file-upload-input">Upload Files</label>
-              <input type="file" id="file-upload-input" accept="audio/*,video/*" multiple style="display: none;">
-            </li>
-          </ul>
-        </nav>
-      </header>
-
-      <div class="content">
-        <aside id="sidebar" class="sidebar" aria-label="File sidebar">
-          <h2>Your Files</h2>
-          <div id="sidebar-content-wrapper">
-            <!-- Dynamic file list and messages will be rendered here by VanJS -->
-          </div>
-          <button id="delete-all-files-button" class="delete-all-btn outline" style="display: none;">Delete All</button>
-        </aside>
-
-        <main>
-          <div class="media-container">
-            <div class="player-wrapper">
-              <div id="upload-prompt" class="upload-prompt" style="display: flex;">
-                Upload media files to start playing
-              </div>
-              <div id="loading-indicator" class="loading-indicator" style="display: none;">
-                Loading your media files...
-              </div>
-              <div id="video-container-wrapper" class="video-container" style="display: none;">
-                <div class="media-element-container">
-                  <video id="media-player" controls preload="auto" controlsList="nodownload" crossorigin="anonymous"
-                    playsinline></video>
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-
-      <dialog id="confirm-delete-all-dialog">
-        <div class="dialog-content">
-          <h2>Confirm Deletion</h2>
-          <p>Are you sure you want to delete all files? This action cannot be undone.</p>
-          <div class="dialog-buttons">
-            <button id="cancel-delete-all-button" class="secondary">Cancel</button>
-            <button id="confirm-delete-all-button" class="danger">Delete All</button>
-          </div>
-        </div>
-      </dialog>
-    </div>
-  </div>
+  <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 
