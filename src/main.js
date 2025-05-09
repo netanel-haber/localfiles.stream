@@ -402,8 +402,7 @@ function Sidebar() {
       }
 
       if (mediaFiles.val.length > 0) {
-        return [
-          div({ class: 'files-count' }, `${mediaFiles.val.length} files available`),
+        return div({},
           ul({},
             ...mediaFiles.val.map(file => {
               // Debug the file object
@@ -438,7 +437,7 @@ function Sidebar() {
             class: 'delete-all-btn outline',
             onclick: deleteAllFiles
           }, "Delete All")
-        ];
+        );
       } else {
         return div({ class: 'empty-message' }, "No files added yet");
       }
@@ -683,47 +682,3 @@ document.addEventListener('DOMContentLoaded', () => {
   document.head.appendChild(style);
 });
 
-// Add manual file refresh function
-const refreshFiles = async () => {
-  console.log('Manually refreshing files from IndexedDB');
-  try {
-    const files = await loadData();
-    console.log(`Refreshed ${files.length} files from IndexedDB`);
-
-    // Make sure sidebar is updated with files
-    if (files.length > 0) {
-      sidebarOpen.val = true;
-    }
-
-    return files;
-  } catch (error) {
-    console.error('Error refreshing files:', error);
-    return [];
-  }
-};
-
-// Add debug button to document
-document.addEventListener('DOMContentLoaded', () => {
-  const debugButton = document.createElement('button');
-  debugButton.textContent = 'Debug: Fix Player';
-  debugButton.style.position = 'fixed';
-  debugButton.style.bottom = '10px';
-  debugButton.style.right = '10px';
-  debugButton.style.zIndex = '9999';
-  debugButton.style.backgroundColor = '#ff4d4d';
-  debugButton.style.color = 'white';
-  debugButton.style.padding = '8px 16px';
-  debugButton.style.borderRadius = '4px';
-  debugButton.style.cursor = 'pointer';
-
-  debugButton.addEventListener('click', () => {
-    if (mediaFiles.val.length > 0) {
-      // Try to play the first file
-      playFile(mediaFiles.val[0]);
-    } else {
-      alert('No files available to play');
-    }
-  });
-
-  document.body.appendChild(debugButton);
-});
