@@ -370,6 +370,7 @@ function playFile(file) {
     // Set the source
     console.log(`Setting player source to: ${sourceUrl}`);
     player.src = sourceUrl;
+    player.setAttribute('data-current-file-id', file.id); // Tag player with file ID
 
     // Set the time if available
     if (typeof file.progress === 'number') {
@@ -615,28 +616,26 @@ function MediaPlayer() {
             crossorigin: 'anonymous',
             playsinline: true,
             ontimeupdate: (e) => {
-              // Store playback position for resume
-              const currentSrc = e.target.src;
-              const currentTime = e.target.currentTime;
-
-              // Find the matching file
-              const file = mediaFiles.val.find(f => {
-                // Check various possible sources
-                if (f.file && URL.createObjectURL(f.file) === currentSrc) return true;
-                if (f.data === currentSrc) return true;
-                return false;
-              });
-
-              if (file) {
-                updateProgress(file.id, currentTime);
+              const fileId = e.target.getAttribute('data-current-file-id');
+              if (fileId) {
+                updateProgress(fileId, e.target.currentTime);
               }
             },
             onplay: (e) => {
-              console.log('Media started playing');
+              console.log('Media started playing. File ID:', e.target.getAttribute('data-current-file-id'));
+            },
+            onended: (e) => {
+              console.log('Media ended. Saving final progress.');
+              const fileId = e.target.getAttribute('data-current-file-id');
+              if (fileId && e.target.duration && isFinite(e.target.duration)) {
+                updateProgress(fileId, e.target.duration); // Save final position as full duration
+              }
+              e.target.removeAttribute('data-current-file-id'); // Clean up
             },
             onerror: (e) => {
               console.error('Media player error:', e.target.error);
               alert('Error playing media: ' + (e.target.error ? e.target.error.message : 'Unknown error'));
+              e.target.removeAttribute('data-current-file-id'); // Clean up
             }
           })
         )
