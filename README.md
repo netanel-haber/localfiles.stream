@@ -1,4 +1,5 @@
-<img align="center" height="200px" src="./download_app.jpg"/>
+<p align="center">
+<img height="200px" src="./download_app.jpg"/></p>
 
 Embarrassingly or not, this was a successful vibe-ish coding experiment with cursor.
 
