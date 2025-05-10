@@ -1,3 +1,5 @@
+<img src="./download_app.jpg"/>
+
 Embarrassingly or not, this was a successful vibe-ish coding experiment with cursor.
 
 # localfiles.stream
