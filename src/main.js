@@ -1,4 +1,3 @@
-import "@picocss/pico/css/pico.min.css";
 import "./style.css";
 import van from "vanjs-core";
 import { registerSW } from "virtual:pwa-register";
@@ -602,64 +601,51 @@ function Sidebar() {
 function Header() {
   return header(
     {},
-    nav(
-      { class: "container-fluid" },
-      ul(
-        li(
-          button(
-            {
-              class: "hamburger outline",
-              onclick: () => {
-                sidebarOpen.val = !sidebarOpen.val;
-              },
-            },
-            "☰",
-          ),
-        ),
-        li(h1({}, "localfiles.stream")),
-        li(
-          a(
-            { href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
-            img({
-              src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-              alt: "GitHub",
-              style: "height: 20px;",
-            }),
-          ),
-        ),
-        li(
-          div({
-            style: "margin: auto; font-size: 10px; background: #333; padding: 2px 6px; border-radius: 4px; color: #ccc; font-family: monospace;",
-            title: `Build: ${__BUILD_TIME__}`,
-          }, __COMMIT_SHA__),
-        ),
+
+    div(
+      button(
+        {
+          class: "hamburger outline",
+          onclick: () => {
+            sidebarOpen.val = !sidebarOpen.val;
+          },
+        },
+        "☰",
       ),
-      ul(
-        li(
-          label({ class: "upload-btn", for: "file-upload" }, "Upload Files"),
-          input({
-            type: "file",
-            id: "file-upload",
-            accept: "audio/*,video/*",
-            multiple: true,
-            style: "display: none",
-            onchange: async (e) => {
-              try {
-                if (e.target.files && e.target.files.length > 0) {
-                  await addFiles(e.target.files);
-                  console.log(`Selected ${e.target.files.length} files`);
-                } else {
-                  console.log("No files selected");
-                }
-                e.target.value = ""; // Reset input to allow selecting the same file again
-              } catch (error) {
-                console.error("Error in file input change handler (or during addFiles):", error);
-                alert("Failed to process selected files. Please try again.");
-              }
-            },
+      h1({}, "localfiles.stream"),
+      div({ class: "github-link" },
+        a(
+          { href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
+          img({
+            src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+            alt: "GitHub",
           }),
         ),
       ),
+    ),
+    div(
+      label({ class: "upload-btn", for: "file-upload" }, "Upload Files"),
+      input({
+        type: "file",
+        id: "file-upload",
+        accept: "audio/*,video/*",
+        multiple: true,
+        style: "display: none",
+        onchange: async (e) => {
+          try {
+            if (e.target.files && e.target.files.length > 0) {
+              await addFiles(e.target.files);
+              console.log(`Selected ${e.target.files.length} files`);
+            } else {
+              console.log("No files selected");
+            }
+            e.target.value = ""; // Reset input to allow selecting the same file again
+          } catch (error) {
+            console.error("Error in file input change handler (or during addFiles):", error);
+            alert("Failed to process selected files. Please try again.");
+          }
+        },
+      }),
     ),
   );
 }
