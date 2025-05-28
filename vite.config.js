@@ -1,17 +1,20 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
     server: {
         port: 5173,
         strictPort: false,
+        https: true,
         hmr: {
-            protocol: 'ws',
+            protocol: 'wss',
             host: 'localhost',
             port: 5173,
         },
     },
     plugins: [
+        basicSsl(),
         VitePWA({
             registerType: 'prompt',
             devOptions: {
@@ -45,7 +48,19 @@ export default defineConfig({
                         files: [
                             {
                                 name: "media",
-                                accept: ["audio/*", "video/*"]
+                                accept: [
+                                    "audio/*",
+                                    "video/*",
+                                    "audio/mpeg",
+                                    "audio/mp3",
+                                    "audio/wav",
+                                    "audio/ogg",
+                                    "audio/m4a",
+                                    "video/mp4",
+                                    "video/webm",
+                                    "video/avi",
+                                    "video/mov"
+                                ]
                             }
                         ]
                     }
