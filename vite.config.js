@@ -3,10 +3,28 @@ import { VitePWA } from 'vite-plugin-pwa';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import git from 'git-rev-sync';
 
+// Safely get git info with fallbacks
+function getGitInfo() {
+    try {
+        return {
+            sha: git.short(),
+            buildTime: new Date().toISOString()
+        };
+    } catch (error) {
+        console.warn('Git not available, using fallback values');
+        return {
+            sha: 'dev',
+            buildTime: new Date().toISOString()
+        };
+    }
+}
+
+const gitInfo = getGitInfo();
+
 export default defineConfig({
     define: {
-        __COMMIT_SHA__: JSON.stringify(git.short()),
-        __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+        __COMMIT_SHA__: JSON.stringify(gitInfo.sha),
+        __BUILD_TIME__: JSON.stringify(gitInfo.buildTime),
     },
     server: {
         port: 5173,

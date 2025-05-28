@@ -618,36 +618,6 @@ function Header() {
         ),
         li(h1({}, "localfiles.stream")),
         li(
-          span({
-            style: "font-size: 10px; background: #333; padding: 2px 6px; border-radius: 4px; color: #ccc; font-family: monospace;",
-            title: `Build: ${__BUILD_TIME__}`,
-          }, __COMMIT_SHA__),
-        ),
-        li(
-          // Debug button to test share target registration
-          button({
-            class: "outline",
-            style: "font-size: 12px; padding: 4px 8px;",
-            onclick: () => {
-              // Check if the app is standalone (installed)
-              const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                window.navigator.standalone === true;
-
-              // Check Web Share API support
-              const hasWebShare = 'share' in navigator;
-
-              alert(`Debug Info:
-• Standalone mode: ${isStandalone ? 'YES' : 'NO'}
-• Web Share API: ${hasWebShare ? 'YES' : 'NO'}
-• User Agent: ${navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Other'}
-• Display Mode: ${window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser'}
-
-${!isStandalone ? '⚠️ Install app first (Add to Home Screen)' : '✅ App is installed'}
-${!hasWebShare ? '⚠️ Web Share not supported' : '✅ Web Share supported'}`);
-            }
-          }, "Debug"),
-        ),
-        li(
           a(
             { href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
             img({
@@ -656,6 +626,12 @@ ${!hasWebShare ? '⚠️ Web Share not supported' : '✅ Web Share supported'}`)
               style: "height: 20px;",
             }),
           ),
+        ),
+        li(
+          div({
+            style: "margin: auto; font-size: 10px; background: #333; padding: 2px 6px; border-radius: 4px; color: #ccc; font-family: monospace;",
+            title: `Build: ${__BUILD_TIME__}`,
+          }, __COMMIT_SHA__),
         ),
       ),
       ul(
