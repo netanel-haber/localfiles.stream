@@ -19,6 +19,9 @@ export default defineConfig({
                 type: 'module',
                 navigateFallback: 'index.html',
             },
+            strategies: 'injectManifest',
+            srcDir: 'public',
+            filename: 'sw.js',
             manifest: {
                 name: 'localfiles.stream',
                 short_name: 'localfiles',
@@ -34,23 +37,23 @@ export default defineConfig({
                         purpose: 'any'
                     }
                 ],
+                share_target: {
+                    action: "/share-target",
+                    method: "POST",
+                    enctype: "multipart/form-data",
+                    params: {
+                        files: [
+                            {
+                                name: "media",
+                                accept: ["audio/*", "video/*"]
+                            }
+                        ]
+                    }
+                },
             },
             workbox: {
                 globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-                runtimeCaching: [
-                    {
-                        urlPattern: /^https:\/\/localfiles\.stream\/.*/i,
-                        handler: 'CacheFirst',
-                        options: {
-                            cacheName: 'localfiles-cache',
-                            expiration: {
-                                maxEntries: 10,
-                                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-                            },
-                        },
-                    },
-                ],
-                navigateFallbackDenylist: [/^\/api\//],
+                navigateFallbackDenylist: [/^\/api\//, /^\/share-target$/],
                 skipWaiting: true,
                 clientsClaim: true,
             },

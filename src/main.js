@@ -76,15 +76,20 @@ function initDB() {
     }
 
     console.log("Opening IndexedDB...");
-    const request = indexedDB.open("localfilesDB", 1);
+    const request = indexedDB.open("localfilesDB", 2); // Updated version to match service worker
 
     request.onupgradeneeded = (event) => {
-      console.log("Database upgrade needed, creating object store");
+      console.log("Database upgrade needed, creating object stores");
       const db = event.target.result;
       if (!db.objectStoreNames.contains("mediaFiles")) {
         // Object store will now hold { id: fileId, blob: File }
         db.createObjectStore("mediaFiles", { keyPath: "id" });
-        console.log("Object store created successfully");
+        console.log("mediaFiles object store created successfully");
+      }
+      if (!db.objectStoreNames.contains("sharedFiles")) {
+        // Object store for shared files from other apps
+        db.createObjectStore("sharedFiles", { keyPath: "id" });
+        console.log("sharedFiles object store created successfully");
       }
     };
 
@@ -171,6 +176,66 @@ async function clearAllFileBlobs(db) {
     request.onsuccess = () => resolve();
     request.onerror = (e) => reject(e.target.error);
   });
+}
+
+// Shared Files Helper Functions
+async function retrieveSharedFiles(db) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error("Database not initialized for retrieveSharedFiles");
+      return reject(new Error("Database not initialized"));
+    }
+    const transaction = db.transaction("sharedFiles", "readonly");
+    const store = transaction.objectStore("sharedFiles");
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function clearSharedFiles(db) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error("Database not initialized for clearSharedFiles");
+      return reject(new Error("Database not initialized"));
+    }
+    const transaction = db.transaction("sharedFiles", "readwrite");
+    const store = transaction.objectStore("sharedFiles");
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// Process shared files and add them to the main media library
+async function processSharedFiles() {
+  try {
+    const db = await initDB();
+    const sharedFiles = await retrieveSharedFiles(db);
+
+    if (sharedFiles.length > 0) {
+      console.log(`Found ${sharedFiles.length} shared files to process`);
+
+      // Convert shared files to the format expected by addFiles
+      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
+
+      // Add files to the main library
+      await addFiles(filesToAdd);
+
+      // Clear shared files after processing
+      await clearSharedFiles(db);
+
+      // Show notification
+      alert(`${sharedFiles.length} shared file(s) added to your library!`);
+
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("Error processing shared files:", error);
+    return false;
+  }
 }
 
 // Local Storage Metadata Helper Functions
@@ -705,6 +770,23 @@ function App() {
 
     console.log("Loading data...");
     await loadData();
+
+    // Check for shared files (from Web Share Target API)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('shared') === 'true') {
+      console.log("App opened with shared files, processing...");
+      await processSharedFiles();
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (urlParams.get('error') === 'share_failed') {
+      console.error("Share operation failed");
+      alert("Failed to share files to the app. Please try again.");
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // Check for shared files anyway (in case URL params were missed)
+      await processSharedFiles();
+    }
 
     console.log(`App initialized with ${mediaFiles.val.length} files`);
 
