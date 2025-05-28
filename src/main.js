@@ -618,6 +618,12 @@ function Header() {
         ),
         li(h1({}, "localfiles.stream")),
         li(
+          span({
+            style: "font-size: 10px; background: #333; padding: 2px 6px; border-radius: 4px; color: #ccc; font-family: monospace;",
+            title: `Build: ${__BUILD_TIME__}`,
+          }, __COMMIT_SHA__),
+        ),
+        li(
           // Debug button to test share target registration
           button({
             class: "outline",

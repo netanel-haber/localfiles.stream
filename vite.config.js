@@ -1,8 +1,13 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import git from 'git-rev-sync';
 
 export default defineConfig({
+    define: {
+        __COMMIT_SHA__: JSON.stringify(git.short()),
+        __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    },
     server: {
         port: 5173,
         strictPort: false,
