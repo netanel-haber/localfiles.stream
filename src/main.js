@@ -1,7 +1,6 @@
 import "./style.css";
 import van from "vanjs-core";
 import { registerSW } from "virtual:pwa-register";
-import { filterValidSharedFiles, validateAndFilterFiles } from "./fileValidation.js";
 
 // Register service worker using Vite PWA's registration function
 if ("serviceWorker" in navigator) {
@@ -216,14 +215,8 @@ async function processSharedFiles() {
     if (sharedFiles.length > 0) {
       console.log(`Found ${sharedFiles.length} shared files to process`);
 
-      // Use extracted validation function to filter invalid files
-      const filesToAdd = filterValidSharedFiles(sharedFiles);
-
-      if (filesToAdd.length === 0) {
-        console.warn("No valid files to add after filtering");
-        await clearSharedFiles(db);
-        return false;
-      }
+      // Convert shared files to the format expected by addFiles
+      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
 
       // Add files to the main library
       await addFiles(filesToAdd);
@@ -232,7 +225,7 @@ async function processSharedFiles() {
       await clearSharedFiles(db);
 
       // Show notification
-      alert(`${filesToAdd.length} shared file(s) added to your library!`);
+      alert(`${sharedFiles.length} shared file(s) added to your library!`);
 
       return true;
     }
@@ -240,9 +233,7 @@ async function processSharedFiles() {
     return false;
   } catch (error) {
     console.error("Error processing shared files:", error);
-    // Make sure loading state is reset even on error
-    isLoading.val = false;
-    alert("Failed to process shared files. Please try uploading them manually.");
+    isLoading.val = false; // Reset loading state on error
     return false;
   }
 }
@@ -321,14 +312,6 @@ async function addFiles(files) {
       return;
     }
 
-    // Use extracted validation function to filter invalid files
-    const validFiles = validateAndFilterFiles(files);
-
-    if (validFiles.length === 0) {
-      console.error("No valid files to process after validation");
-      return;
-    }
-
     // Force remove any previous loading indicator
     document.body.className = document.body.className.replace("is-uploading", "");
 
@@ -336,10 +319,10 @@ async function addFiles(files) {
     const newFiles = [];
     const db = await initDB(); // Initialize DB connection once
 
-    // Process each valid file
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i];
-      console.log(`Processing file ${i + 1}/${validFiles.length}: ${file.name}`);
+    // Process each file
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
 
       // Skip files that are too large
       if (file.size > MAX_FILE_SIZE) {
@@ -398,16 +381,13 @@ async function addFiles(files) {
             playFile(newFiles[0]);
           } catch (playError) {
             console.error("Error auto-playing file:", playError);
-            // Don't alert here, just log - the file is still added successfully
           }
         }, 500);
       }
     }
   } catch (error) {
     console.error("Error in addFiles:", error);
-    // Ensure loading state is reset
     isLoading.val = false;
-    alert(`Error adding files: ${error.message || 'Unknown error'}. Please try again.`);
   }
 }
 
@@ -794,26 +774,20 @@ function App() {
     await loadData();
 
     // Check for shared files (from Web Share Target API)
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('shared') === 'true') {
-        console.log("App opened with shared files, processing...");
-        await processSharedFiles();
-        // Clean up URL parameters
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else if (urlParams.get('error') === 'share_failed') {
-        console.error("Share operation failed");
-        alert("Failed to share files to the app. Please try again.");
-        // Clean up URL parameters
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else {
-        // Check for shared files anyway (in case URL params were missed)
-        await processSharedFiles();
-      }
-    } catch (shareError) {
-      console.error("Error during shared files processing:", shareError);
-      // Don't block app initialization if share processing fails
-      // The error is already handled in processSharedFiles, but this is an extra safety net
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('shared') === 'true') {
+      console.log("App opened with shared files, processing...");
+      await processSharedFiles();
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (urlParams.get('error') === 'share_failed') {
+      console.error("Share operation failed");
+      alert("Failed to share files to the app. Please try again.");
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // Check for shared files anyway (in case URL params were missed)
+      await processSharedFiles();
     }
 
     console.log(`App initialized with ${mediaFiles.val.length} files`);
