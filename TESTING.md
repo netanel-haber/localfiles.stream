@@ -4,12 +4,17 @@ This document explains how to reproduce and verify the fix for the white screen 
 
 ## The Bug
 
-When sharing media files from other apps to localfiles.stream, the app would display a white screen and become unresponsive. This happened because:
+When sharing media files from other apps to localfiles.stream, the app would display a white screen and become unresponsive. The files themselves were valid, but the share flow had issues processing them.
 
-1. The service worker stored shared files in IndexedDB
-2. Some shared file objects had missing or invalid `file` properties
-3. When `processSharedFiles()` tried to access `sharedFile.file.name`, it threw an error
-4. This unhandled error left the app in a broken state with `isLoading` stuck as `true`
+### Root Causes Identified
+
+The tests in `src/shareFlow.test.js` demonstrate several scenarios that could cause the white screen:
+
+1. **Undefined file property**: Service worker stores shared file entries where `file` property is undefined
+2. **Corrupted file objects**: IndexedDB retrieval corrupts file objects (loses prototype or properties)
+3. **Null/empty files**: Share array contains null or invalid entries
+4. **Race conditions**: Files array modified during async processing
+5. **Missing error handling**: Original `addFiles()` had NO try-catch, so any error would crash the app
 
 ## Running the Tests
 
@@ -17,12 +22,33 @@ When sharing media files from other apps to localfiles.stream, the app would dis
 # Run all tests
 bun test
 
-# Run specific test file
+# Run file validation tests
 bun test src/fileValidation.test.js
+
+# Run share flow bug reproduction tests
+bun test src/shareFlow.test.js
 
 # Run with verbose output
 bun test --verbose
 ```
+
+## Test Files
+
+### `src/fileValidation.test.js`
+Tests the pure validation functions that filter out invalid files.
+
+### `src/shareFlow.test.js` (NEW)
+**Reproduces the actual share flow bug** by simulating the complete flow:
+1. Service worker stores files → `createSharedFileEntry()`
+2. App retrieves files → `processSharedFilesFlow()`
+3. App processes files → `simulateAddFilesProcessing()`
+
+This test demonstrates what happens with:
+- ✅ Valid files (should work)
+- ❌ Undefined file properties (causes crash)
+- ❌ Corrupted file objects (creates invalid entries)
+- ❌ Mixed valid/invalid files (partial failure)
+- ✅ Fixed flow with validation (works safely)
 
 ## Test Structure
 
