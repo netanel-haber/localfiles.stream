@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
 
-// Get the commit SHA from main branch (not current branch or gh-pages)
+// Get the current commit SHA at build time (not gh-pages branch)
 const getCommitSha = () => {
     try {
         // First try to get from environment variable (for CI/CD builds)
@@ -10,13 +10,8 @@ const getCommitSha = () => {
             return process.env.VITE_COMMIT_SHA;
         }
 
-        // Otherwise get the SHA from the main branch
-        // Try origin/main first, then fall back to main
-        try {
-            return execSync('git rev-parse origin/main').toString().trim();
-        } catch {
-            return execSync('git rev-parse main').toString().trim();
-        }
+        // Get the current commit SHA (HEAD)
+        return execSync('git rev-parse HEAD').toString().trim();
     } catch (error) {
         console.warn('Could not get commit SHA:', error);
         return 'unknown';
