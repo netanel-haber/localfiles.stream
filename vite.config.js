@@ -1,8 +1,21 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'child_process';
 
+// Get the current commit SHA
+const getCommitSha = () => {
+    try {
+        return execSync('git rev-parse HEAD').toString().trim();
+    } catch (error) {
+        console.warn('Could not get commit SHA:', error);
+        return 'unknown';
+    }
+};
 
 export default defineConfig({
+    define: {
+        __COMMIT_SHA__: JSON.stringify(getCommitSha()),
+    },
     server: {
         port: 5173,
         strictPort: false,

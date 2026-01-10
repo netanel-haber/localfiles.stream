@@ -85,6 +85,8 @@ header nav {
   padding: 1rem;
   overflow-y: auto;
   transition: left 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar.open {
@@ -317,4 +319,24 @@ dialog::backdrop {
 
 img {
   height: 100%;
+}
+
+/* Sidebar footer styling */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.commit-link {
+  color: rgba(255, 255, 255, 0.5);
+  text-decoration: none;
+  font-family: monospace;
+  transition: color 0.2s ease;
+}
+
+.commit-link:hover {
+  color: var(--primary-color);
 }
