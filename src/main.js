@@ -224,8 +224,8 @@ async function processSharedFiles() {
             console.warn("Invalid shared file object:", sharedFile);
             return false;
           }
-          // Validate that the file has required properties
-          if (!sharedFile.file.name || !sharedFile.file.type) {
+          // Validate that the file/blob has basic properties (name is optional for Blobs)
+          if (!sharedFile.file.type || sharedFile.file.size === undefined) {
             console.warn("Shared file missing required properties:", sharedFile);
             return false;
           }
@@ -342,11 +342,28 @@ async function addFiles(files) {
   // Process each file
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
+
+    // Defensive check: skip invalid file objects
+    if (!file || typeof file !== 'object') {
+      console.warn(`Skipping invalid file at index ${i}:`, file);
+      continue;
+    }
+
+    // Check for required File properties
+    // Note: Files from share target might be Blob objects without a name
+    if (file.size === undefined || file.type === undefined) {
+      console.warn(`Skipping file with missing properties at index ${i}:`, file);
+      continue;
+    }
+
+    // If file is a Blob without a name (possible with shared files), create a default name
+    const fileName = file.name || `shared-file-${Date.now()}-${i}.${file.type.split('/')[1] || 'bin'}`;
+
+    console.log(`Processing file ${i + 1}/${files.length}: ${fileName}`);
 
     // Skip files that are too large
     if (file.size > MAX_FILE_SIZE) {
-      alert(`File ${file.name} exceeds the 1000MB size limit.`);
+      alert(`File ${fileName} exceeds the 1000MB size limit.`);
       continue;
     }
 
@@ -356,10 +373,10 @@ async function addFiles(files) {
     // Create the file object with just the essential info
     const newFile = {
       id: fileId,
-      name: file.name,
+      name: fileName, // Use the fileName we determined above
       type: file.type,
       size: file.size,
-      file: file, // Store the actual file object
+      file: file, // Store the actual file object (could be File or Blob)
       progress: 0,
       dateAdded: new Date().toISOString(),
     };
@@ -374,7 +391,7 @@ async function addFiles(files) {
       alert(`Could not save file ${newFile.name} due to a storage error.`);
       continue; // Skip this file
     }
-    console.log(`File ${file.name} processed successfully`);
+    console.log(`File ${fileName} processed successfully`);
   }
 
   // Update the state with all new files at once
