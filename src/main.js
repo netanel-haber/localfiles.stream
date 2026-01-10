@@ -320,11 +320,12 @@ async function addFiles(files) {
   // Process each file
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
+    const fileName = file.name || `shared-file-${Date.now()}-${i}.${file.type.split('/')[1] || 'bin'}`;
+    console.log(`Processing file ${i + 1}/${files.length}: ${fileName}`);
 
     // Skip files that are too large
     if (file.size > MAX_FILE_SIZE) {
-      alert(`File ${file.name} exceeds the 1000MB size limit.`);
+      alert(`File ${fileName} exceeds the 1000MB size limit.`);
       continue;
     }
 
@@ -334,7 +335,7 @@ async function addFiles(files) {
     // Create the file object with just the essential info
     const newFile = {
       id: fileId,
-      name: file.name,
+      name: fileName,
       type: file.type,
       size: file.size,
       file: file, // Store the actual file object
@@ -352,7 +353,7 @@ async function addFiles(files) {
       alert(`Could not save file ${newFile.name} due to a storage error.`);
       continue; // Skip this file
     }
-    console.log(`File ${file.name} processed successfully`);
+    console.log(`File ${fileName} processed successfully`);
   }
 
   // Update the state with all new files at once
