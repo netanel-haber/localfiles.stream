@@ -216,7 +216,22 @@ async function processSharedFiles() {
       console.log(`Found ${sharedFiles.length} shared files to process`);
 
       // Convert shared files to the format expected by addFiles
-      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
+      // Filter out any invalid entries where file property is missing or invalid
+      const filesToAdd = sharedFiles
+        .filter(sharedFile => {
+          if (!sharedFile || !sharedFile.file) {
+            console.warn("Skipping invalid shared file (missing file property):", sharedFile);
+            return false;
+          }
+          return true;
+        })
+        .map(sharedFile => sharedFile.file);
+
+      if (filesToAdd.length === 0) {
+        console.warn("No valid files to add after filtering");
+        await clearSharedFiles(db);
+        return false;
+      }
 
       // Add files to the main library
       await addFiles(filesToAdd);
@@ -225,7 +240,7 @@ async function processSharedFiles() {
       await clearSharedFiles(db);
 
       // Show notification
-      alert(`${sharedFiles.length} shared file(s) added to your library!`);
+      alert(`${filesToAdd.length} shared file(s) added to your library!`);
 
       return true;
     }
@@ -233,6 +248,9 @@ async function processSharedFiles() {
     return false;
   } catch (error) {
     console.error("Error processing shared files:", error);
+    // Make sure loading state is reset even on error
+    isLoading.val = false;
+    alert("Failed to process shared files. Please try uploading them manually.");
     return false;
   }
 }
@@ -302,82 +320,107 @@ const loadData = async () => {
 
 // Much simpler file handling function (Refactored)
 async function addFiles(files) {
-  // Made async
-  const MAX_FILE_SIZE = 1000 * 1024 * 1024; // 1000MB limit
+  try {
+    // Made async
+    const MAX_FILE_SIZE = 1000 * 1024 * 1024; // 1000MB limit
 
-  if (!files || files.length === 0) {
-    console.error("No files selected");
-    return;
-  }
-
-  // Force remove any previous loading indicator
-  document.body.className = document.body.className.replace("is-uploading", "");
-
-  // Create temporary array
-  const newFiles = [];
-  const db = await initDB(); // Initialize DB connection once
-
-  // Process each file
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
-
-    // Skip files that are too large
-    if (file.size > MAX_FILE_SIZE) {
-      alert(`File ${file.name} exceeds the 1000MB size limit.`);
-      continue;
+    if (!files || files.length === 0) {
+      console.error("No files selected");
+      return;
     }
 
-    // Create a unique ID for this file
-    const fileId = `file-${Date.now()}-${i}`;
+    // Force remove any previous loading indicator
+    document.body.className = document.body.className.replace("is-uploading", "");
 
-    // Create the file object with just the essential info
-    const newFile = {
-      id: fileId,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      file: file, // Store the actual file object
-      progress: 0,
-      dateAdded: new Date().toISOString(),
-    };
+    // Create temporary array
+    const newFiles = [];
+    const db = await initDB(); // Initialize DB connection once
 
-    // Store the blob in IndexedDB
-    try {
-      await storeFileBlob(db, newFile.id, newFile.file);
-      console.log(`Blob for ${newFile.name} stored in IndexedDB.`);
-      newFiles.push(newFile); // Add to array only if blob storage is successful
-    } catch (error) {
-      console.error(`Failed to store blob for ${newFile.name}:`, error);
-      alert(`Could not save file ${newFile.name} due to a storage error.`);
-      continue; // Skip this file
+    // Process each file
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // Validate file object
+      if (!file || typeof file !== 'object') {
+        console.warn(`Skipping invalid file at index ${i}:`, file);
+        continue;
+      }
+
+      // Ensure file has required properties
+      if (!file.name || !file.type || file.size === undefined) {
+        console.warn(`Skipping file with missing properties at index ${i}:`, file);
+        continue;
+      }
+
+      console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
+
+      // Skip files that are too large
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`File ${file.name} exceeds the 1000MB size limit.`);
+        continue;
+      }
+
+      // Create a unique ID for this file
+      const fileId = `file-${Date.now()}-${i}`;
+
+      // Create the file object with just the essential info
+      const newFile = {
+        id: fileId,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        file: file, // Store the actual file object
+        progress: 0,
+        dateAdded: new Date().toISOString(),
+      };
+
+      // Store the blob in IndexedDB
+      try {
+        await storeFileBlob(db, newFile.id, newFile.file);
+        console.log(`Blob for ${newFile.name} stored in IndexedDB.`);
+        newFiles.push(newFile); // Add to array only if blob storage is successful
+      } catch (error) {
+        console.error(`Failed to store blob for ${newFile.name}:`, error);
+        alert(`Could not save file ${newFile.name} due to a storage error.`);
+        continue; // Skip this file
+      }
+      console.log(`File ${file.name} processed successfully`);
     }
-    console.log(`File ${file.name} processed successfully`);
-  }
 
-  // Update the state with all new files at once
-  if (newFiles.length > 0) {
-    console.log(`Adding ${newFiles.length} files to the library`);
-
-    const updatedFiles = [...mediaFiles.val, ...newFiles];
-    mediaFiles.val = updatedFiles;
-
-    // Save metadata to Local Storage
-    saveMetadataToLocalStorage(updatedFiles);
-    console.log("File metadata saved to Local Storage.");
-
-    // Open the sidebar
-    sidebarOpen.val = true;
-
-    // Show confirmation
-    alert(`${newFiles.length} files uploaded successfully!`);
-
-    // Try to play the first new file
+    // Update the state with all new files at once
     if (newFiles.length > 0) {
-      setTimeout(() => {
-        playFile(newFiles[0]);
-      }, 500);
+      console.log(`Adding ${newFiles.length} files to the library`);
+
+      const updatedFiles = [...mediaFiles.val, ...newFiles];
+      mediaFiles.val = updatedFiles;
+
+      // Save metadata to Local Storage
+      saveMetadataToLocalStorage(updatedFiles);
+      console.log("File metadata saved to Local Storage.");
+
+      // Open the sidebar
+      sidebarOpen.val = true;
+
+      // Show confirmation
+      alert(`${newFiles.length} files uploaded successfully!`);
+
+      // Try to play the first new file
+      if (newFiles.length > 0) {
+        setTimeout(() => {
+          try {
+            playFile(newFiles[0]);
+          } catch (playError) {
+            console.error("Error auto-playing file:", playError);
+            // Don't alert here, just log - the file is still added successfully
+          }
+        }, 500);
+      }
     }
+  } catch (error) {
+    console.error("Error in addFiles:", error);
+    // Ensure loading state is reset
+    isLoading.val = false;
+    alert(`Error adding files: ${error.message || 'Unknown error'}. Please try again.`);
   }
 }
 
@@ -764,20 +807,26 @@ function App() {
     await loadData();
 
     // Check for shared files (from Web Share Target API)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('shared') === 'true') {
-      console.log("App opened with shared files, processing...");
-      await processSharedFiles();
-      // Clean up URL parameters
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (urlParams.get('error') === 'share_failed') {
-      console.error("Share operation failed");
-      alert("Failed to share files to the app. Please try again.");
-      // Clean up URL parameters
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-      // Check for shared files anyway (in case URL params were missed)
-      await processSharedFiles();
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('shared') === 'true') {
+        console.log("App opened with shared files, processing...");
+        await processSharedFiles();
+        // Clean up URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (urlParams.get('error') === 'share_failed') {
+        console.error("Share operation failed");
+        alert("Failed to share files to the app. Please try again.");
+        // Clean up URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        // Check for shared files anyway (in case URL params were missed)
+        await processSharedFiles();
+      }
+    } catch (shareError) {
+      console.error("Error during shared files processing:", shareError);
+      // Don't block app initialization if share processing fails
+      // The error is already handled in processSharedFiles, but this is an extra safety net
     }
 
     console.log(`App initialized with ${mediaFiles.val.length} files`);
