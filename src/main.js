@@ -216,23 +216,45 @@ async function processSharedFiles() {
       console.log(`Found ${sharedFiles.length} shared files to process`);
 
       // Convert shared files to the format expected by addFiles
-      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
+      // Add defensive checks to prevent crashes from invalid files
+      const filesToAdd = sharedFiles
+        .filter(sharedFile => {
+          // Validate that sharedFile exists and has a file property
+          if (!sharedFile || !sharedFile.file) {
+            console.warn("Invalid shared file object:", sharedFile);
+            return false;
+          }
+          // Validate that the file has required properties
+          if (!sharedFile.file.name || !sharedFile.file.type) {
+            console.warn("Shared file missing required properties:", sharedFile);
+            return false;
+          }
+          return true;
+        })
+        .map(sharedFile => sharedFile.file);
 
-      // Add files to the main library
-      await addFiles(filesToAdd);
+      // Only proceed if we have valid files to add
+      if (filesToAdd.length > 0) {
+        // Add files to the main library
+        await addFiles(filesToAdd);
 
-      // Clear shared files after processing
+        // Show notification
+        alert(`${filesToAdd.length} shared file(s) added to your library!`);
+      } else {
+        console.warn("No valid shared files to process");
+        alert("Failed to process shared files. Please try again.");
+      }
+
+      // Clear shared files after processing (even if some were invalid)
       await clearSharedFiles(db);
 
-      // Show notification
-      alert(`${sharedFiles.length} shared file(s) added to your library!`);
-
-      return true;
+      return filesToAdd.length > 0;
     }
 
     return false;
   } catch (error) {
     console.error("Error processing shared files:", error);
+    alert("An error occurred while processing shared files. Please try again.");
     return false;
   }
 }
@@ -373,9 +395,14 @@ async function addFiles(files) {
     alert(`${newFiles.length} files uploaded successfully!`);
 
     // Try to play the first new file
-    if (newFiles.length > 0) {
+    if (newFiles.length > 0 && newFiles[0]) {
       setTimeout(() => {
-        playFile(newFiles[0]);
+        try {
+          playFile(newFiles[0]);
+        } catch (error) {
+          console.error("Error playing file after upload:", error);
+          // Don't show alert here as it's not critical - files are already added
+        }
       }, 500);
     }
   }
