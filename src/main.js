@@ -596,6 +596,18 @@ function Sidebar() {
       }
       return div({ class: "empty-message" }, "No files added yet");
     }),
+    div(
+      { class: "sidebar-footer" },
+      a(
+        {
+          href: `https://github.com/netanel-haber/localfiles.stream/commit/${__COMMIT_SHA__}`,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          class: "commit-link",
+        },
+        `${__COMMIT_SHA__.substring(0, 7)}`,
+      ),
+    ),
   );
 }
 
