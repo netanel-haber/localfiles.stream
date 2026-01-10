@@ -216,45 +216,23 @@ async function processSharedFiles() {
       console.log(`Found ${sharedFiles.length} shared files to process`);
 
       // Convert shared files to the format expected by addFiles
-      // Add defensive checks to prevent crashes from invalid files
-      const filesToAdd = sharedFiles
-        .filter(sharedFile => {
-          // Validate that sharedFile exists and has a file property
-          if (!sharedFile || !sharedFile.file) {
-            console.warn("Invalid shared file object:", sharedFile);
-            return false;
-          }
-          // Validate that the file/blob has basic properties (name is optional for Blobs)
-          if (!sharedFile.file.type || sharedFile.file.size === undefined) {
-            console.warn("Shared file missing required properties:", sharedFile);
-            return false;
-          }
-          return true;
-        })
-        .map(sharedFile => sharedFile.file);
+      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
 
-      // Only proceed if we have valid files to add
-      if (filesToAdd.length > 0) {
-        // Add files to the main library
-        await addFiles(filesToAdd);
+      // Add files to the main library
+      await addFiles(filesToAdd);
 
-        // Show notification
-        alert(`${filesToAdd.length} shared file(s) added to your library!`);
-      } else {
-        console.warn("No valid shared files to process");
-        alert("Failed to process shared files. Please try again.");
-      }
-
-      // Clear shared files after processing (even if some were invalid)
+      // Clear shared files after processing
       await clearSharedFiles(db);
 
-      return filesToAdd.length > 0;
+      // Show notification
+      alert(`${sharedFiles.length} shared file(s) added to your library!`);
+
+      return true;
     }
 
     return false;
   } catch (error) {
     console.error("Error processing shared files:", error);
-    alert("An error occurred while processing shared files. Please try again.");
     return false;
   }
 }
@@ -342,23 +320,7 @@ async function addFiles(files) {
   // Process each file
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-
-    // Defensive check: skip invalid file objects
-    if (!file || typeof file !== 'object') {
-      console.warn(`Skipping invalid file at index ${i}:`, file);
-      continue;
-    }
-
-    // Check for required File properties
-    // Note: Files from share target might be Blob objects without a name
-    if (file.size === undefined || file.type === undefined) {
-      console.warn(`Skipping file with missing properties at index ${i}:`, file);
-      continue;
-    }
-
-    // If file is a Blob without a name (possible with shared files), create a default name
     const fileName = file.name || `shared-file-${Date.now()}-${i}.${file.type.split('/')[1] || 'bin'}`;
-
     console.log(`Processing file ${i + 1}/${files.length}: ${fileName}`);
 
     // Skip files that are too large
@@ -373,10 +335,10 @@ async function addFiles(files) {
     // Create the file object with just the essential info
     const newFile = {
       id: fileId,
-      name: fileName, // Use the fileName we determined above
+      name: fileName,
       type: file.type,
       size: file.size,
-      file: file, // Store the actual file object (could be File or Blob)
+      file: file, // Store the actual file object
       progress: 0,
       dateAdded: new Date().toISOString(),
     };
@@ -412,14 +374,9 @@ async function addFiles(files) {
     alert(`${newFiles.length} files uploaded successfully!`);
 
     // Try to play the first new file
-    if (newFiles.length > 0 && newFiles[0]) {
+    if (newFiles.length > 0) {
       setTimeout(() => {
-        try {
-          playFile(newFiles[0]);
-        } catch (error) {
-          console.error("Error playing file after upload:", error);
-          // Don't show alert here as it's not critical - files are already added
-        }
+        playFile(newFiles[0]);
       }, 500);
     }
   }
