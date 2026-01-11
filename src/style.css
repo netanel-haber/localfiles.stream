@@ -82,7 +82,7 @@ header nav {
   background-color: var(--surface-color);
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.3);
   z-index: 1;
-  padding: 1rem;
+  padding: 0rem 1rem;
   overflow-y: auto;
   transition: left 0.3s ease;
   display: flex;
@@ -94,8 +94,7 @@ header nav {
 }
 
 .sidebar h2 {
-  margin-top: 0;
-  margin-bottom: 1rem;
+  margin: 1rem 0rem;
   font-size: 1.2rem;
 }
 
@@ -324,7 +323,7 @@ img {
 /* Sidebar footer styling */
 .sidebar-footer {
   margin-top: auto;
-  padding-top: 1rem;
+  padding-top: 0.3rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
   font-size: 0.75rem;
