@@ -2,6 +2,96 @@ import "./style.css";
 import van from "vanjs-core";
 import { registerSW } from "virtual:pwa-register";
 
+// Global error display function
+function displayError(error, errorInfo = {}) {
+  console.error("Displaying error on screen:", error, errorInfo);
+
+  // Create error display container
+  const errorContainer = document.createElement("div");
+  errorContainer.id = "error-display";
+  errorContainer.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    color: black;
+    padding: 20px;
+    overflow: auto;
+    z-index: 99999;
+    font-family: monospace;
+  `;
+
+  // Create pre element for error content
+  const errorPre = document.createElement("pre");
+  errorPre.style.cssText = `
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+  `;
+
+  // Format error information
+  let errorText = "APPLICATION ERROR\n\n";
+
+  if (error instanceof Error) {
+    errorText += `Name: ${error.name}\n`;
+    errorText += `Message: ${error.message}\n\n`;
+    if (error.stack) {
+      errorText += `Stack Trace:\n${error.stack}\n\n`;
+    }
+  } else {
+    errorText += `Error: ${String(error)}\n\n`;
+  }
+
+  // Add additional error info
+  if (errorInfo.filename) {
+    errorText += `File: ${errorInfo.filename}\n`;
+  }
+  if (errorInfo.lineno) {
+    errorText += `Line: ${errorInfo.lineno}\n`;
+  }
+  if (errorInfo.colno) {
+    errorText += `Column: ${errorInfo.colno}\n`;
+  }
+  if (errorInfo.reason) {
+    errorText += `\nRejection Reason:\n${errorInfo.reason}\n`;
+    if (errorInfo.promise) {
+      errorText += `Promise: ${errorInfo.promise}\n`;
+    }
+  }
+
+  errorPre.textContent = errorText;
+  errorContainer.appendChild(errorPre);
+
+  // Clear body and append error
+  document.body.innerHTML = "";
+  document.body.appendChild(errorContainer);
+}
+
+// Global error handler for uncaught exceptions
+window.onerror = function(message, filename, lineno, colno, error) {
+  displayError(error || new Error(message), {
+    filename,
+    lineno,
+    colno,
+    message
+  });
+  return true; // Prevent default error handling
+};
+
+// Global error handler for unhandled promise rejections
+window.addEventListener("unhandledrejection", function(event) {
+  displayError(
+    event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
+    {
+      reason: event.reason,
+      promise: event.promise
+    }
+  );
+  event.preventDefault(); // Prevent default error handling
+});
+
 // Register service worker using Vite PWA's registration function
 if ("serviceWorker" in navigator) {
   // Delay service worker registration until after page load
