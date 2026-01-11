@@ -4,69 +4,80 @@ import { registerSW } from "virtual:pwa-register";
 
 // Global error display function
 function displayError(error, errorInfo = {}) {
-  console.error("Displaying error on screen:", error, errorInfo);
+  try {
+    console.error("Displaying error on screen:", error, errorInfo);
 
-  // Create error display container
-  const errorContainer = document.createElement("div");
-  errorContainer.id = "error-display";
-  errorContainer.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: white;
-    color: black;
-    padding: 20px;
-    overflow: auto;
-    z-index: 99999;
-    font-family: monospace;
-  `;
+    // Create error display container
+    const errorContainer = document.createElement("div");
+    errorContainer.id = "error-display";
+    errorContainer.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: white;
+      color: black;
+      padding: 20px;
+      overflow: auto;
+      z-index: 99999;
+      font-family: monospace;
+    `;
 
-  // Create pre element for error content
-  const errorPre = document.createElement("pre");
-  errorPre.style.cssText = `
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    margin: 0;
-  `;
+    // Create pre element for error content
+    const errorPre = document.createElement("pre");
+    errorPre.style.cssText = `
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      margin: 0;
+    `;
 
-  // Format error information
-  let errorText = "APPLICATION ERROR\n\n";
+    // Format error information
+    let errorText = "APPLICATION ERROR\n\n";
 
-  if (error instanceof Error) {
-    errorText += `Name: ${error.name}\n`;
-    errorText += `Message: ${error.message}\n\n`;
-    if (error.stack) {
-      errorText += `Stack Trace:\n${error.stack}\n\n`;
+    if (error instanceof Error) {
+      errorText += `Name: ${error.name}\n`;
+      errorText += `Message: ${error.message}\n\n`;
+      if (error.stack) {
+        errorText += `Stack Trace:\n${error.stack}\n\n`;
+      }
+    } else {
+      errorText += `Error: ${String(error)}\n\n`;
     }
-  } else {
-    errorText += `Error: ${String(error)}\n\n`;
-  }
 
-  // Add additional error info
-  if (errorInfo.filename) {
-    errorText += `File: ${errorInfo.filename}\n`;
-  }
-  if (errorInfo.lineno) {
-    errorText += `Line: ${errorInfo.lineno}\n`;
-  }
-  if (errorInfo.colno) {
-    errorText += `Column: ${errorInfo.colno}\n`;
-  }
-  if (errorInfo.reason) {
-    errorText += `\nRejection Reason:\n${errorInfo.reason}\n`;
-    if (errorInfo.promise) {
-      errorText += `Promise: ${errorInfo.promise}\n`;
+    // Add additional error info
+    if (errorInfo.context) {
+      errorText += `Context: ${errorInfo.context}\n`;
     }
+    if (errorInfo.filename) {
+      errorText += `File: ${errorInfo.filename}\n`;
+    }
+    if (errorInfo.lineno) {
+      errorText += `Line: ${errorInfo.lineno}\n`;
+    }
+    if (errorInfo.colno) {
+      errorText += `Column: ${errorInfo.colno}\n`;
+    }
+    if (errorInfo.reason) {
+      errorText += `\nRejection Reason:\n${errorInfo.reason}\n`;
+      if (errorInfo.promise) {
+        errorText += `Promise: ${errorInfo.promise}\n`;
+      }
+    }
+
+    errorPre.textContent = errorText;
+    errorContainer.appendChild(errorPre);
+
+    // Clear body and append error
+    document.body.innerHTML = "";
+    document.body.appendChild(errorContainer);
+  } catch (displayErrorException) {
+    // Last resort - if displayError itself fails, at least log it
+    console.error("CRITICAL: displayError function failed:", displayErrorException);
+    console.error("Original error was:", error, errorInfo);
+    // Try to show something to the user
+    document.body.innerHTML = `<pre style="background: white; color: black; padding: 20px; font-family: monospace;">CRITICAL ERROR: Failed to display error screen.\n\nOriginal error: ${error}\n\nDisplay error: ${displayErrorException}</pre>`;
   }
-
-  errorPre.textContent = errorText;
-  errorContainer.appendChild(errorPre);
-
-  // Clear body and append error
-  document.body.innerHTML = "";
-  document.body.appendChild(errorContainer);
 }
 
 // Global error handler for uncaught exceptions
@@ -198,13 +209,8 @@ function initDB() {
       const error = event.target.error;
       console.error("IndexedDB error:", error);
 
-      // Check for known error types
-      if (error.name === "QuotaExceededError") {
-        alert("Storage quota exceeded. Please delete some files before adding more.");
-      } else {
-        alert(`Database error: ${error.message}`);
-      }
-
+      // Display error on screen
+      displayError(error, { context: "IndexedDB initialization" });
       reject(error);
     };
   });
@@ -323,6 +329,7 @@ async function processSharedFiles() {
     return false;
   } catch (error) {
     console.error("Error processing shared files:", error);
+    displayError(error, { context: "Processing shared files" });
     return false;
   }
 }
@@ -336,6 +343,7 @@ function getMetadataFromLocalStorage() {
     return metadataJson ? JSON.parse(metadataJson) : [];
   } catch (error) {
     console.error("Error reading metadata from Local Storage:", error);
+    displayError(error, { context: "Reading metadata from Local Storage" });
     return [];
   }
 }
@@ -350,9 +358,7 @@ function saveMetadataToLocalStorage(metadataArray) {
     localStorage.setItem(LOCAL_STORAGE_METADATA_KEY, JSON.stringify(storableMetadata));
   } catch (error) {
     console.error("Error saving metadata to Local Storage:", error);
-    if (error.name === "QuotaExceededError") {
-      alert("Local Storage quota exceeded. Cannot save file list. Please clear some browser data.");
-    }
+    displayError(error, { context: "Saving metadata to Local Storage" });
   }
 }
 
@@ -376,6 +382,7 @@ const loadData = async () => {
         }
       } catch (error) {
         console.error(`Error loading blob for file ID ${meta.id}:`, error);
+        displayError(error, { context: `Loading blob for file ID ${meta.id}` });
       }
     }
 
@@ -386,6 +393,7 @@ const loadData = async () => {
   } catch (error) {
     console.error("Error in loadData:", error);
     isLoading.val = false;
+    displayError(error, { context: "Loading data" });
     return [];
   }
 };
@@ -440,7 +448,7 @@ async function addFiles(files) {
       newFiles.push(newFile); // Add to array only if blob storage is successful
     } catch (error) {
       console.error(`Failed to store blob for ${newFile.name}:`, error);
-      alert(`Could not save file ${newFile.name} due to a storage error.`);
+      displayError(error, { context: `Storing blob for ${newFile.name}` });
       continue; // Skip this file
     }
     console.log(`File ${fileName} processed successfully`);
@@ -479,8 +487,9 @@ function playFile(file) {
   try {
     const player = document.getElementById("media-player");
     if (!player) {
-      console.error("Media player element not found");
-      alert("Media player not found. Please refresh the page.");
+      const error = new Error("Media player element not found");
+      console.error(error);
+      displayError(error, { context: "Playing file - player not found" });
       return;
     }
 
@@ -505,8 +514,9 @@ function playFile(file) {
       // Use existing data URL or blob URL
       sourceUrl = file.data;
     } else {
+      const error = new Error(`Cannot play ${file.name || "file"}: Invalid source format`);
       console.error("File has no playable source:", file);
-      alert(`Cannot play ${file.name || "file"}: Invalid source format`);
+      displayError(error, { context: "Playing file - invalid source" });
       return;
     }
 
@@ -545,7 +555,7 @@ function playFile(file) {
     }, 300);
   } catch (error) {
     console.error("Error in playFile function:", error);
-    alert(`Error playing file: ${error.message}`);
+    displayError(error, { context: "Playing file" });
   }
 }
 
@@ -564,7 +574,7 @@ async function deleteFile(id) {
     console.log(`Blob for file ID ${id} removed from IndexedDB.`);
   } catch (error) {
     console.error(`Failed to remove blob for file ID ${id} from IndexedDB:`, error);
-    // Decide if we should proceed with metadata removal or alert user
+    displayError(error, { context: `Removing blob for file ID ${id}` });
   }
 
   // Remove from state
@@ -596,8 +606,7 @@ async function confirmDeleteAll() {
     console.log("All file blobs cleared from IndexedDB.");
   } catch (error) {
     console.error("Failed to clear all file blobs from IndexedDB:", error);
-    alert("Could not clear all stored file data. Please try again.");
-    // Potentially do not proceed with clearing metadata if blob clearing fails
+    displayError(error, { context: "Clearing all file blobs" });
   }
 
   // Clear metadata from Local Storage
@@ -745,7 +754,7 @@ function Header() {
             e.target.value = ""; // Reset input to allow selecting the same file again
           } catch (error) {
             console.error("Error in file input change handler (or during addFiles):", error);
-            alert("Failed to process selected files. Please try again.");
+            displayError(error, { context: "File input change handler" });
           }
         },
       }),
@@ -810,8 +819,9 @@ function MediaPlayer() {
               e.target.removeAttribute("data-current-file-id"); // Clean up
             },
             onerror: (e) => {
-              console.error("Media player error:", e.target.error);
-              alert(`Error playing media: ${e.target.error ? e.target.error.message : "Unknown error"}`);
+              const error = e.target.error || new Error("Unknown media player error");
+              console.error("Media player error:", error);
+              displayError(error, { context: "Media player error" });
               e.target.removeAttribute("data-current-file-id"); // Clean up
             },
           }),
@@ -874,8 +884,9 @@ function App() {
       // Clean up URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (urlParams.get('error') === 'share_failed') {
-      console.error("Share operation failed");
-      alert("Failed to share files to the app. Please try again.");
+      const error = new Error("Share operation failed");
+      console.error(error);
+      displayError(error, { context: "Share target operation" });
       // Clean up URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
     } else {
@@ -911,5 +922,6 @@ function App() {
   } catch (error) {
     console.error("Error initializing app:", error);
     isLoading.val = false;
+    displayError(error, { context: "App initialization" });
   }
 })();
