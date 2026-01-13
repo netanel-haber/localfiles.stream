@@ -55,6 +55,9 @@ function displayError(error, errorInfo = {}) {
   }
 
   // Add additional error info
+  if (errorInfo.context) {
+    errorText += `Context: ${errorInfo.context}\n`;
+  }
   if (errorInfo.filename) {
     errorText += `File: ${errorInfo.filename}\n`;
   }
@@ -893,7 +896,21 @@ function App() {
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (urlParams.get('error') === 'share_failed') {
       console.error("Share operation failed");
-      alert("Failed to share files to the app. Please try again.");
+
+      // Get error details from URL params
+      const errorMsg = urlParams.get('error_msg');
+      const errorName = urlParams.get('error_name');
+
+      // Create a detailed error to display
+      const shareError = new Error(errorMsg || 'Failed to share files');
+      shareError.name = errorName || 'ShareError';
+
+      // Display the error on screen
+      displayError(shareError, {
+        message: 'Service worker share handler failed',
+        context: 'Android share operation'
+      });
+
       // Clean up URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
     } else {

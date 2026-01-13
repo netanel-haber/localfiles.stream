@@ -2,6 +2,16 @@ import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { CacheFirst } from 'workbox-strategies';
 
+// Global error handler for service worker
+self.addEventListener('error', (event) => {
+    console.error('Service Worker Error:', event.error);
+});
+
+// Global unhandled rejection handler for service worker
+self.addEventListener('unhandledrejection', (event) => {
+    console.error('Service Worker Unhandled Rejection:', event.reason);
+});
+
 // Precache all static assets
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
@@ -28,24 +38,35 @@ self.addEventListener('fetch', event => {
 
 async function handleShareTarget(request) {
     try {
+        console.log('[SW] Handling share target request');
         const formData = await request.formData();
         const mediaFiles = formData.getAll('media');
 
-        console.log('Received shared files:', mediaFiles.length);
+        console.log('[SW] Received shared files:', mediaFiles.length);
 
         if (mediaFiles.length > 0) {
             // Store the shared files temporarily in IndexedDB for the main app to pick up
+            console.log('[SW] Storing shared files in IndexedDB');
             await storeSharedFiles(mediaFiles);
+            console.log('[SW] Successfully stored shared files');
 
             // Redirect to the main app with a flag indicating shared files are available
             return Response.redirect('/?shared=true', 303);
         }
 
         // If no files, just redirect to main app
+        console.log('[SW] No files to share, redirecting to home');
         return Response.redirect('/', 303);
     } catch (error) {
-        console.error('Error handling shared files:', error);
-        return Response.redirect('/?error=share_failed', 303);
+        console.error('[SW] Error handling shared files:', error);
+        console.error('[SW] Error stack:', error.stack);
+        console.error('[SW] Error name:', error.name);
+        console.error('[SW] Error message:', error.message);
+
+        // Encode error details in URL for debugging
+        const errorMsg = encodeURIComponent(error.message || 'Unknown error');
+        const errorName = encodeURIComponent(error.name || 'Error');
+        return Response.redirect(`/?error=share_failed&error_msg=${errorMsg}&error_name=${errorName}`, 303);
     }
 }
 
