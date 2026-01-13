@@ -63,6 +63,13 @@ console.info = function(...args) {
   addLogEntry('info', args);
 };
 
+// Listen for log messages from service worker
+navigator.serviceWorker?.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SW_LOG') {
+    addLogEntry(event.data.level, [event.data.message]);
+  }
+});
+
 function handleError(error) {
   console.error(error);
   if (debugMode.val) throw error;
