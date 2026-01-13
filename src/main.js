@@ -7,6 +7,62 @@ const debugMode = van.state(
   localStorage.getItem("debugMode") === "true" || window.location.hash === "#debug"
 );
 
+// Console log viewer for mobile debugging
+const consoleLogViewerOpen = van.state(false);
+const consoleLogs = van.state([]);
+const MAX_LOGS = 200;
+
+// Intercept console methods to capture logs
+const originalConsole = {
+  log: console.log,
+  error: console.error,
+  warn: console.warn,
+  info: console.info
+};
+
+function addLogEntry(level, args) {
+  const timestamp = new Date().toLocaleTimeString();
+  const message = args.map(arg => {
+    if (typeof arg === 'object') {
+      try {
+        return JSON.stringify(arg, null, 2);
+      } catch (e) {
+        return String(arg);
+      }
+    }
+    return String(arg);
+  }).join(' ');
+
+  const newLogs = [...consoleLogs.val, { timestamp, level, message }];
+
+  // Keep only the last MAX_LOGS entries
+  if (newLogs.length > MAX_LOGS) {
+    newLogs.shift();
+  }
+
+  consoleLogs.val = newLogs;
+}
+
+console.log = function(...args) {
+  originalConsole.log.apply(console, args);
+  addLogEntry('log', args);
+};
+
+console.error = function(...args) {
+  originalConsole.error.apply(console, args);
+  addLogEntry('error', args);
+};
+
+console.warn = function(...args) {
+  originalConsole.warn.apply(console, args);
+  addLogEntry('warn', args);
+};
+
+console.info = function(...args) {
+  originalConsole.info.apply(console, args);
+  addLogEntry('info', args);
+};
+
 function handleError(error) {
   console.error(error);
   if (debugMode.val) throw error;
@@ -858,6 +914,73 @@ function ConfirmDialog() {
   );
 }
 
+function ConsoleLogViewer() {
+  return van.derive(() => {
+    if (!debugMode.val) return null;
+
+    return div(
+      {
+        class: van.derive(() => `console-viewer ${consoleLogViewerOpen.val ? 'open' : 'closed'}`),
+      },
+      div(
+        { class: "console-header" },
+        span({}, `Console (${consoleLogs.val.length})`),
+        div(
+          { class: "console-controls" },
+          button(
+            {
+              class: "console-btn",
+              onclick: () => {
+                consoleLogs.val = [];
+              },
+            },
+            "Clear"
+          ),
+          button(
+            {
+              class: "console-btn",
+              onclick: () => {
+                consoleLogViewerOpen.val = !consoleLogViewerOpen.val;
+              },
+            },
+            van.derive(() => consoleLogViewerOpen.val ? "▼" : "▲")
+          ),
+        ),
+      ),
+      van.derive(() => {
+        if (!consoleLogViewerOpen.val) return null;
+
+        return div(
+          {
+            class: "console-logs",
+            id: "console-logs-container"
+          },
+          ...consoleLogs.val.map((log) => {
+            return div(
+              { class: `console-entry console-${log.level}` },
+              span({ class: "console-timestamp" }, log.timestamp),
+              span({ class: "console-level" }, log.level.toUpperCase()),
+              van.tags.pre({ class: "console-message" }, log.message),
+            );
+          })
+        );
+      })
+    );
+  });
+}
+
+// Auto-scroll console to bottom when new logs are added
+van.derive(() => {
+  if (consoleLogViewerOpen.val && consoleLogs.val.length > 0) {
+    setTimeout(() => {
+      const container = document.getElementById('console-logs-container');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 10);
+  }
+});
+
 // Main App
 function App() {
   return div(
@@ -865,6 +988,7 @@ function App() {
     Header(),
     div({ class: "content" }, Sidebar(), main({}, MediaPlayer())),
     ConfirmDialog(),
+    ConsoleLogViewer(),
   );
 }
 
