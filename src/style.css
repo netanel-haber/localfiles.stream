@@ -358,3 +358,118 @@ img {
 .commit-link:hover {
   color: var(--primary-color);
 }
+
+/* Console Log Viewer */
+.console-viewer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #1a1a1a;
+  border-top: 2px solid #333;
+  z-index: 100000;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-viewer.closed {
+  max-height: 32px;
+}
+
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background-color: #252525;
+  border-bottom: 1px solid #333;
+  font-weight: bold;
+  color: #ccc;
+}
+
+.console-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.console-btn {
+  background: #333;
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.console-btn:hover {
+  background: #444;
+}
+
+.console-logs {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.5rem;
+  max-height: calc(50vh - 32px);
+}
+
+.console-entry {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-bottom: 1px solid #2a2a2a;
+  align-items: start;
+}
+
+.console-timestamp {
+  color: #888;
+  font-size: 10px;
+}
+
+.console-level {
+  font-weight: bold;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.console-log .console-level {
+  color: #4a9eff;
+  background: rgba(74, 158, 255, 0.1);
+}
+
+.console-error .console-level {
+  color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.1);
+}
+
+.console-warn .console-level {
+  color: #ffa500;
+  background: rgba(255, 165, 0, 0.1);
+}
+
+.console-info .console-level {
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.console-message {
+  color: #ccc;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.console-error .console-message {
+  color: #ff6b6b;
+}
+
+.console-warn .console-message {
+  color: #ffb347;
+}
