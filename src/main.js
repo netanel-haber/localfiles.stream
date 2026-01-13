@@ -2,6 +2,16 @@ import "./style.css";
 import van from "vanjs-core";
 import { registerSW } from "virtual:pwa-register";
 
+// Debug mode - when enabled, all errors become unhandled and display on white screen
+const debugMode = van.state(
+  localStorage.getItem("debugMode") === "true" || window.location.hash === "#debug"
+);
+
+function handleError(error) {
+  console.error(error);
+  if (debugMode.val) throw error;
+}
+
 // Global error display function
 function displayError(error, errorInfo = {}) {
   console.error("Displaying error on screen:", error, errorInfo);
@@ -322,7 +332,7 @@ async function processSharedFiles() {
 
     return false;
   } catch (error) {
-    console.error("Error processing shared files:", error);
+    handleError(error);
     return false;
   }
 }
@@ -335,7 +345,7 @@ function getMetadataFromLocalStorage() {
     const metadataJson = localStorage.getItem(LOCAL_STORAGE_METADATA_KEY);
     return metadataJson ? JSON.parse(metadataJson) : [];
   } catch (error) {
-    console.error("Error reading metadata from Local Storage:", error);
+    handleError(error);
     return [];
   }
 }
@@ -349,7 +359,7 @@ function saveMetadataToLocalStorage(metadataArray) {
     });
     localStorage.setItem(LOCAL_STORAGE_METADATA_KEY, JSON.stringify(storableMetadata));
   } catch (error) {
-    console.error("Error saving metadata to Local Storage:", error);
+    handleError(error);
     if (error.name === "QuotaExceededError") {
       alert("Local Storage quota exceeded. Cannot save file list. Please clear some browser data.");
     }
@@ -375,7 +385,7 @@ const loadData = async () => {
           console.warn(`Blob not found in IndexedDB for file ID: ${meta.id}. Skipping file.`);
         }
       } catch (error) {
-        console.error(`Error loading blob for file ID ${meta.id}:`, error);
+        handleError(error);
       }
     }
 
@@ -384,7 +394,7 @@ const loadData = async () => {
     isLoading.val = false;
     return mediaFiles.val;
   } catch (error) {
-    console.error("Error in loadData:", error);
+    handleError(error);
     isLoading.val = false;
     return [];
   }
@@ -439,7 +449,7 @@ async function addFiles(files) {
       console.log(`Blob for ${newFile.name} stored in IndexedDB.`);
       newFiles.push(newFile); // Add to array only if blob storage is successful
     } catch (error) {
-      console.error(`Failed to store blob for ${newFile.name}:`, error);
+      handleError(error);
       alert(`Could not save file ${newFile.name} due to a storage error.`);
       continue; // Skip this file
     }
@@ -544,7 +554,7 @@ function playFile(file) {
       }
     }, 300);
   } catch (error) {
-    console.error("Error in playFile function:", error);
+    handleError(error);
     alert(`Error playing file: ${error.message}`);
   }
 }
@@ -563,8 +573,7 @@ async function deleteFile(id) {
     await removeFileBlob(db, id);
     console.log(`Blob for file ID ${id} removed from IndexedDB.`);
   } catch (error) {
-    console.error(`Failed to remove blob for file ID ${id} from IndexedDB:`, error);
-    // Decide if we should proceed with metadata removal or alert user
+    handleError(error);
   }
 
   // Remove from state
@@ -595,9 +604,8 @@ async function confirmDeleteAll() {
     await clearAllFileBlobs(db);
     console.log("All file blobs cleared from IndexedDB.");
   } catch (error) {
-    console.error("Failed to clear all file blobs from IndexedDB:", error);
+    handleError(error);
     alert("Could not clear all stored file data. Please try again.");
-    // Potentially do not proceed with clearing metadata if blob clearing fails
   }
 
   // Clear metadata from Local Storage
@@ -688,6 +696,16 @@ function Sidebar() {
     }),
     div(
       { class: "sidebar-footer" },
+      button(
+        {
+          class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
+          onclick: () => {
+            debugMode.val = !debugMode.val;
+            localStorage.setItem("debugMode", debugMode.val);
+          },
+        },
+        van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF"),
+      ),
       a(
         {
           href: `https://github.com/netanel-haber/localfiles.stream/commit/${__COMMIT_SHA__}`,
@@ -744,7 +762,7 @@ function Header() {
             }
             e.target.value = ""; // Reset input to allow selecting the same file again
           } catch (error) {
-            console.error("Error in file input change handler (or during addFiles):", error);
+            handleError(error);
             alert("Failed to process selected files. Please try again.");
           }
         },
@@ -909,7 +927,7 @@ function App() {
       console.log("Files found, showing sidebar");
     }
   } catch (error) {
-    console.error("Error initializing app:", error);
+    handleError(error);
     isLoading.val = false;
   }
 })();

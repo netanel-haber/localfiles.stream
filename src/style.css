@@ -323,10 +323,29 @@ img {
 /* Sidebar footer styling */
 .sidebar-footer {
   margin-top: auto;
-  padding-top: 0.3rem;
+  padding: 0.5rem 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
   font-size: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.debug-toggle {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.debug-toggle.active {
+  background-color: #ff4d4d;
+  border-color: #ff4d4d;
+  color: white;
 }
 
 .commit-link {
