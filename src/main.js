@@ -792,23 +792,26 @@ function Sidebar() {
     }),
     div(
       { class: "sidebar-footer" },
-      button(
-        {
-          class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
-          onclick: () => {
-            debugMode.val = !debugMode.val;
-            localStorage.setItem("debugMode", debugMode.val);
+      div(
+        { class: "sidebar-footer-buttons" },
+        button(
+          {
+            class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
+            onclick: () => {
+              debugMode.val = !debugMode.val;
+              localStorage.setItem("debugMode", debugMode.val);
+            },
           },
-        },
-        van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF"),
-      ),
-      button(
-        {
-          class: "force-update-btn outline",
-          onclick: forceUpdate,
-          disabled: van.derive(() => isUpdating.val),
-        },
-        van.derive(() => isUpdating.val ? "Checking..." : "Check for Updates"),
+          van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF"),
+        ),
+        button(
+          {
+            class: "force-update-btn",
+            onclick: forceUpdate,
+            disabled: van.derive(() => isUpdating.val),
+          },
+          van.derive(() => isUpdating.val ? "Checking..." : "Check for Updates"),
+        ),
       ),
       a(
         {
@@ -940,6 +943,7 @@ function MediaPlayer() {
         ),
       ),
     ),
+    ConsoleLogViewer(),
   );
 }
 
@@ -1033,7 +1037,6 @@ function App() {
     Header(),
     div({ class: "content" }, Sidebar(), main({}, MediaPlayer())),
     ConfirmDialog(),
-    ConsoleLogViewer(),
   );
 }
 

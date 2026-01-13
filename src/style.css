@@ -328,24 +328,44 @@ img {
   text-align: center;
   font-size: 0.75rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.debug-toggle {
+.sidebar-footer-buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.debug-toggle,
+.force-update-btn {
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: rgba(255, 255, 255, 0.5);
-  padding: 0.2rem 0.4rem;
+  padding: 0.3rem 0.6rem;
   border-radius: 4px;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.debug-toggle:hover,
+.force-update-btn:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 .debug-toggle.active {
   background-color: #ff4d4d;
   border-color: #ff4d4d;
   color: white;
+}
+
+.force-update-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .commit-link {
@@ -361,22 +381,23 @@ img {
 
 /* Console Log Viewer */
 .console-viewer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
   background-color: #1a1a1a;
-  border-top: 2px solid #333;
-  z-index: 100000;
+  border: 2px solid #333;
+  border-radius: 4px;
+  margin: 0.5rem;
   font-family: 'Courier New', monospace;
   font-size: 11px;
-  max-height: 50vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .console-viewer.closed {
-  max-height: 32px;
+  height: auto;
+}
+
+.console-viewer.open {
+  height: 300px;
 }
 
 .console-header {
@@ -413,7 +434,6 @@ img {
   overflow-y: auto;
   flex: 1;
   padding: 0.5rem;
-  max-height: calc(50vh - 32px);
 }
 
 .console-entry {
