@@ -169,11 +169,12 @@ window.addEventListener("unhandledrejection", function(event) {
 });
 
 // Register service worker using Vite PWA's registration function
+let updateServiceWorker;
 if ("serviceWorker" in navigator) {
   // Delay service worker registration until after page load
   window.addEventListener("load", () => {
     // This will correctly handle both dev and prod environments
-    registerSW({
+    updateServiceWorker = registerSW({
       immediate: false, // Changed from true to false for delayed registration
       onRegistered(r) {
         console.log("Service worker has been registered");
@@ -191,6 +192,7 @@ const { div, header, main, aside, h1, h2, button, input, label, span, dialog, na
 const mediaFiles = van.state([]);
 const sidebarOpen = van.state(false);
 const isLoading = van.state(true);
+const isUpdating = van.state(false);
 
 // Object URL tracking for cleanup
 const objectUrls = new Map();
@@ -687,6 +689,34 @@ function cancelDeleteAll() {
   document.getElementById("confirm-dialog").close();
 }
 
+async function forceUpdate() {
+  if (!updateServiceWorker) {
+    console.log("Update service worker function not available yet");
+    alert("Update service not ready. Please try again in a moment.");
+    return;
+  }
+
+  isUpdating.val = true;
+  console.log("Checking for updates...");
+
+  try {
+    const needsRefresh = await updateServiceWorker(true);
+
+    if (needsRefresh) {
+      console.log("Update found and installed, reloading...");
+      window.location.reload();
+    } else {
+      console.log("No update available, already on latest version");
+      alert("You're already running the latest version!");
+      isUpdating.val = false;
+    }
+  } catch (error) {
+    console.error("Error checking for updates:", error);
+    alert("Failed to check for updates. Please try again.");
+    isUpdating.val = false;
+  }
+}
+
 function updateProgress(id, currentTime) {
   const updatedFiles = mediaFiles.val.map((file) => (file.id === id ? { ...file, progress: currentTime } : file));
   mediaFiles.val = updatedFiles;
@@ -762,15 +792,26 @@ function Sidebar() {
     }),
     div(
       { class: "sidebar-footer" },
-      button(
-        {
-          class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
-          onclick: () => {
-            debugMode.val = !debugMode.val;
-            localStorage.setItem("debugMode", debugMode.val);
+      div(
+        { class: "sidebar-footer-buttons" },
+        button(
+          {
+            class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
+            onclick: () => {
+              debugMode.val = !debugMode.val;
+              localStorage.setItem("debugMode", debugMode.val);
+            },
           },
-        },
-        van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF"),
+          van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF"),
+        ),
+        button(
+          {
+            class: "force-update-btn",
+            onclick: forceUpdate,
+            disabled: van.derive(() => isUpdating.val),
+          },
+          van.derive(() => isUpdating.val ? "Checking..." : "Check for Updates"),
+        ),
       ),
       a(
         {
@@ -902,6 +943,7 @@ function MediaPlayer() {
         ),
       ),
     ),
+    ConsoleLogViewer(),
   );
 }
 
@@ -995,7 +1037,6 @@ function App() {
     Header(),
     div({ class: "content" }, Sidebar(), main({}, MediaPlayer())),
     ConfirmDialog(),
-    ConsoleLogViewer(),
   );
 }
 
