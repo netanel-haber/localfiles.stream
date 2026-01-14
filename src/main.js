@@ -43,25 +43,12 @@ function addLogEntry(level, args) {
   consoleLogs.val = newLogs;
 }
 
-console.log = function(...args) {
-  originalConsole.log.apply(console, args);
-  addLogEntry('log', args);
-};
-
-console.error = function(...args) {
-  originalConsole.error.apply(console, args);
-  addLogEntry('error', args);
-};
-
-console.warn = function(...args) {
-  originalConsole.warn.apply(console, args);
-  addLogEntry('warn', args);
-};
-
-console.info = function(...args) {
-  originalConsole.info.apply(console, args);
-  addLogEntry('info', args);
-};
+['log', 'error', 'warn', 'info'].forEach(method => {
+  console[method] = function(...args) {
+    originalConsole[method].apply(console, args);
+    addLogEntry(method, args);
+  };
+});
 
 // Listen for log messages from service worker
 navigator.serviceWorker?.addEventListener('message', (event) => {
@@ -169,7 +156,7 @@ window.addEventListener("unhandledrejection", function(event) {
 });
 
 // Register service worker using Vite PWA's registration function
-let updateServiceWorker;
+let updateServiceWorker = () => Promise.resolve(false);
 if ("serviceWorker" in navigator) {
   // Delay service worker registration until after page load
   window.addEventListener("load", () => {
@@ -288,91 +275,41 @@ function initDB() {
   });
 }
 
+// IndexedDB Helper
+function dbOperation(db, storeName, mode, operation) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      console.error(`Database not initialized`);
+      return reject(new Error("Database not initialized"));
+    }
+    const transaction = db.transaction(storeName, mode);
+    const request = operation(transaction.objectStore(storeName));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
 // IndexedDB Blob Storage Helper Functions
-async function storeFileBlob(db, fileId, fileBlob) {
-  return new Promise((resolve, reject) => {
-    if (!db) {
-      console.error("Database not initialized for storeFileBlob");
-      return reject(new Error("Database not initialized"));
-    }
-    const transaction = db.transaction("mediaFiles", "readwrite");
-    const store = transaction.objectStore("mediaFiles");
-    const request = store.put({ id: fileId, blob: fileBlob });
-    request.onsuccess = () => resolve();
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
+const storeFileBlob = (db, fileId, fileBlob) =>
+  dbOperation(db, "mediaFiles", "readwrite", store => store.put({ id: fileId, blob: fileBlob }));
 
-async function retrieveFileBlob(db, fileId) {
-  return new Promise((resolve, reject) => {
-    if (!db) {
-      console.error("Database not initialized for retrieveFileBlob");
-      return reject(new Error("Database not initialized"));
-    }
-    const transaction = db.transaction("mediaFiles", "readonly");
-    const store = transaction.objectStore("mediaFiles");
-    const request = store.get(fileId);
-    request.onsuccess = () => resolve(request.result ? request.result.blob : null);
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
+const retrieveFileBlob = (db, fileId) =>
+  dbOperation(db, "mediaFiles", "readonly", store => store.get(fileId))
+    .then(result => result ? result.blob : null);
 
-async function removeFileBlob(db, fileId) {
-  return new Promise((resolve, reject) => {
-    if (!db) {
-      console.error("Database not initialized for removeFileBlob");
-      return reject(new Error("Database not initialized"));
-    }
-    const transaction = db.transaction("mediaFiles", "readwrite");
-    const store = transaction.objectStore("mediaFiles");
-    const request = store.delete(fileId);
-    request.onsuccess = () => resolve();
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
+const removeFileBlob = (db, fileId) =>
+  dbOperation(db, "mediaFiles", "readwrite", store => store.delete(fileId));
 
-async function clearAllFileBlobs(db) {
-  return new Promise((resolve, reject) => {
-    if (!db) {
-      console.error("Database not initialized for clearAllFileBlobs");
-      return reject(new Error("Database not initialized"));
-    }
-    const transaction = db.transaction("mediaFiles", "readwrite");
-    const store = transaction.objectStore("mediaFiles");
-    const request = store.clear();
-    request.onsuccess = () => resolve();
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
+const clearAllFileBlobs = (db) =>
+  dbOperation(db, "mediaFiles", "readwrite", store => store.clear());
 
 // Shared Files Helper Functions
-async function retrieveSharedFiles(db) {
-  return new Promise((resolve, reject) => {
-    if (!db) {
-      console.error("Database not initialized for retrieveSharedFiles");
-      return reject(new Error("Database not initialized"));
-    }
-    const transaction = db.transaction("sharedFiles", "readonly");
-    const store = transaction.objectStore("sharedFiles");
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
+const retrieveSharedFiles = (db) =>
+  dbOperation(db, "sharedFiles", "readonly", store => store.getAll())
+    .then(result => result || []);
 
-async function clearSharedFiles(db) {
-  return new Promise((resolve, reject) => {
-    if (!db) {
-      console.error("Database not initialized for clearSharedFiles");
-      return reject(new Error("Database not initialized"));
-    }
-    const transaction = db.transaction("sharedFiles", "readwrite");
-    const store = transaction.objectStore("sharedFiles");
-    const request = store.clear();
-    request.onsuccess = () => resolve();
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
+const clearSharedFiles = (db) =>
+  dbOperation(db, "sharedFiles", "readwrite", store => store.clear());
 
 // Process shared files and add them to the main media library
 async function processSharedFiles() {
@@ -541,12 +478,10 @@ async function addFiles(files) {
     // Show confirmation
     alert(`${newFiles.length} files uploaded successfully!`);
 
-    // Try to play the first new file
-    if (newFiles.length > 0) {
-      setTimeout(() => {
-        playFile(newFiles[0]);
-      }, 500);
-    }
+    // Play the first new file
+    setTimeout(() => {
+      playFile(newFiles[0]);
+    }, 500);
   }
 }
 
