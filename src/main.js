@@ -203,6 +203,7 @@ async function processSharedFiles() {
     alert(`${sharedFiles.length} shared file(s) added to your library!`);
     return true;
   } catch (error) {
+    console.error("Error processing shared files:", error);
     handleError(error);
     return false;
   }
@@ -242,6 +243,7 @@ const loadData = async () => {
     mediaFiles.val = files;
     isLoading.val = false;
   } catch (error) {
+    console.error("Error loading data:", error);
     handleError(error);
     isLoading.val = false;
   }
@@ -276,6 +278,7 @@ async function addFiles(files) {
       await storeFileBlob(db, newFile.id, newFile.file);
       newFiles.push(newFile);
     } catch (error) {
+      console.error("Error storing file in IndexedDB:", error);
       handleError(error);
       alert(`Could not save ${newFile.name}`);
     }
@@ -293,25 +296,36 @@ async function addFiles(files) {
 
 // Play file
 function playFile(file) {
-  const player = document.getElementById("media-player");
-  if (!player) return alert("Media player not found. Refresh the page.");
+  try {
+    const player = document.getElementById("media-player");
+    if (!player) {
+      console.error("Media player element not found");
+      return alert("Media player not found. Refresh the page.");
+    }
 
-  document.getElementById("video-container").style.display = "block";
-  document.querySelector(".upload-prompt")?.style.setProperty("display", "none");
+    document.getElementById("video-container").style.display = "block";
+    document.querySelector(".upload-prompt")?.style.setProperty("display", "none");
 
-  const sourceUrl = file.file instanceof File ? createAndTrackObjectURL(file) : file.data;
-  if (!sourceUrl) return alert(`Cannot play ${file.name}: Invalid source`);
+    const sourceUrl = file.file instanceof File ? createAndTrackObjectURL(file) : file.data;
+    if (!sourceUrl) {
+      console.error("File has no playable source:", file);
+      return alert(`Cannot play ${file.name}: Invalid source`);
+    }
 
-  player.src = sourceUrl;
-  player.setAttribute("data-current-file-id", file.id);
-  if (file.progress) player.currentTime = file.progress;
-  if (window.innerWidth < 768) sidebarOpen.val = false;
+    player.src = sourceUrl;
+    player.setAttribute("data-current-file-id", file.id);
+    if (file.progress) player.currentTime = file.progress;
+    if (window.innerWidth < 768) sidebarOpen.val = false;
 
-  setTimeout(() => {
-    player.play()
-      .then(() => localStorage.setItem("lastPlayedFileId", file.id))
-      .catch(() => {});
-  }, 300);
+    setTimeout(() => {
+      player.play()
+        .then(() => localStorage.setItem("lastPlayedFileId", file.id))
+        .catch(console.error);
+    }, 300);
+  } catch (error) {
+    handleError(error);
+    alert(`Error playing file: ${error.message}`);
+  }
 }
 
 // Delete file
@@ -321,6 +335,7 @@ async function deleteFile(id) {
     const db = await initDB();
     await removeFileBlob(db, id);
   } catch (error) {
+    console.error("Error removing file from IndexedDB:", error);
     handleError(error);
   }
   const updatedFiles = mediaFiles.val.filter((f) => f.id !== id);
@@ -338,6 +353,7 @@ async function confirmDeleteAll() {
   try {
     await clearAllFileBlobs(await initDB());
   } catch (error) {
+    console.error("Error clearing IndexedDB:", error);
     handleError(error);
   }
   saveMetadata([]);
@@ -351,7 +367,7 @@ function cancelDeleteAll() {
 
 async function forceUpdate() {
   isUpdating.val = true;
-  await updateServiceWorker(true).catch(() => {});
+  await updateServiceWorker(true).catch(e => console.error("Update error:", e));
   window.location.reload();
 }
 
