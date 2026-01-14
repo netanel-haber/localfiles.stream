@@ -1000,23 +1000,24 @@ function ConsoleLogViewer() {
         ),
       ),
     ),
-    div(
-      {
-        class: "console-logs",
-        id: "console-logs-container",
-        style: van.derive(() => consoleLogViewerOpen.val ? "" : "display: none;"),
-      },
-      van.derive(() => {
-        return consoleLogs.val.map((log) => {
+    van.derive(() => {
+      if (!consoleLogViewerOpen.val) return div({ class: "console-logs", style: "display: none;" });
+
+      return div(
+        {
+          class: "console-logs",
+          id: "console-logs-container",
+        },
+        ...consoleLogs.val.map((log) => {
           return div(
             { class: `console-entry console-${log.level}` },
             span({ class: "console-timestamp" }, log.timestamp),
             span({ class: "console-level" }, log.level.toUpperCase()),
             van.tags.pre({ class: "console-message" }, log.message),
           );
-        });
-      })
-    )
+        })
+      );
+    })
   );
 }
 
