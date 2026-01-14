@@ -103,7 +103,11 @@ window.addEventListener("unhandledrejection", function(event) {
 let updateServiceWorker = () => Promise.resolve(false);
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    updateServiceWorker = registerSW({ immediate: false });
+    updateServiceWorker = registerSW({
+      immediate: false,
+      onRegistered() { console.log("Service worker registered"); },
+      onRegisterError(e) { console.error("Service worker registration error:", e); },
+    });
   });
 }
 
@@ -120,7 +124,9 @@ const objectUrls = new Map();
 
 function createAndTrackObjectURL(file) {
   if (!objectUrls.has(file.id)) {
-    objectUrls.set(file.id, URL.createObjectURL(file.file));
+    const url = URL.createObjectURL(file.file);
+    objectUrls.set(file.id, url);
+    console.log(`Created blob URL for ${file.id}`);
   }
   return objectUrls.get(file.id);
 }
@@ -129,6 +135,7 @@ function releaseObjectURL(fileId) {
   if (objectUrls.has(fileId)) {
     URL.revokeObjectURL(objectUrls.get(fileId));
     objectUrls.delete(fileId);
+    console.log(`Released blob URL for ${fileId}`);
   }
 }
 
@@ -139,20 +146,28 @@ function initDB() {
       return reject(new Error("IndexedDB is not supported"));
     }
 
+    console.log("Opening IndexedDB...");
     const request = indexedDB.open("localfilesDB", 2);
 
     request.onupgradeneeded = (e) => {
+      console.log("Database upgrade needed");
       const db = e.target.result;
       if (!db.objectStoreNames.contains("mediaFiles")) {
         db.createObjectStore("mediaFiles", { keyPath: "id" });
+        console.log("Created mediaFiles store");
       }
       if (!db.objectStoreNames.contains("sharedFiles")) {
         db.createObjectStore("sharedFiles", { keyPath: "id" });
+        console.log("Created sharedFiles store");
       }
     };
 
-    request.onsuccess = (e) => resolve(e.target.result);
+    request.onsuccess = (e) => {
+      console.log("IndexedDB opened successfully");
+      resolve(e.target.result);
+    };
     request.onerror = (e) => {
+      console.error("IndexedDB error:", e.target.error);
       alert(`Database error: ${e.target.error.message}`);
       reject(e.target.error);
     };
@@ -198,6 +213,7 @@ async function processSharedFiles() {
     const sharedFiles = await retrieveSharedFiles(db);
     if (sharedFiles.length === 0) return false;
 
+    console.log(`Processing ${sharedFiles.length} shared files`);
     await addFiles(sharedFiles.map(f => f.file));
     await clearSharedFiles(db);
     alert(`${sharedFiles.length} shared file(s) added to your library!`);
@@ -230,8 +246,10 @@ function saveMetadata(files) {
 const loadData = async () => {
   try {
     isLoading.val = true;
+    console.log("Loading data...");
     const db = await initDB();
     const metadata = getMetadata();
+    console.log(`Found ${metadata.length} files in metadata`);
 
     const files = (await Promise.all(
       metadata.map(async (meta) => {
@@ -241,6 +259,7 @@ const loadData = async () => {
     )).filter(Boolean);
 
     mediaFiles.val = files;
+    console.log(`Loaded ${files.length} files`);
     isLoading.val = false;
   } catch (error) {
     console.error("Error loading data:", error);
@@ -259,6 +278,8 @@ async function addFiles(files) {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+    console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
+
     if (file.size > MAX_SIZE) {
       alert(`File ${file.name} exceeds 1000MB limit.`);
       continue;
@@ -276,6 +297,7 @@ async function addFiles(files) {
 
     try {
       await storeFileBlob(db, newFile.id, newFile.file);
+      console.log(`Stored ${newFile.name} in IndexedDB`);
       newFiles.push(newFile);
     } catch (error) {
       console.error("Error storing file in IndexedDB:", error);
@@ -285,6 +307,7 @@ async function addFiles(files) {
   }
 
   if (newFiles.length > 0) {
+    console.log(`Adding ${newFiles.length} files to library`);
     const updatedFiles = [...mediaFiles.val, ...newFiles];
     mediaFiles.val = updatedFiles;
     saveMetadata(updatedFiles);
@@ -296,6 +319,7 @@ async function addFiles(files) {
 
 // Play file
 function playFile(file) {
+  console.log("Playing file:", file.name);
   try {
     const player = document.getElementById("media-player");
     if (!player) {
@@ -312,6 +336,7 @@ function playFile(file) {
       return alert(`Cannot play ${file.name}: Invalid source`);
     }
 
+    console.log(`Setting player source to: ${sourceUrl.substring(0, 50)}...`);
     player.src = sourceUrl;
     player.setAttribute("data-current-file-id", file.id);
     if (file.progress) player.currentTime = file.progress;
@@ -319,7 +344,10 @@ function playFile(file) {
 
     setTimeout(() => {
       player.play()
-        .then(() => localStorage.setItem("lastPlayedFileId", file.id))
+        .then(() => {
+          console.log(`Playing ${file.name}`);
+          localStorage.setItem("lastPlayedFileId", file.id);
+        })
         .catch(console.error);
     }, 300);
   } catch (error) {
@@ -330,10 +358,12 @@ function playFile(file) {
 
 // Delete file
 async function deleteFile(id) {
+  console.log(`Deleting file: ${id}`);
   releaseObjectURL(id);
   try {
     const db = await initDB();
     await removeFileBlob(db, id);
+    console.log(`Removed ${id} from IndexedDB`);
   } catch (error) {
     console.error("Error removing file from IndexedDB:", error);
     handleError(error);
@@ -348,10 +378,12 @@ function deleteAllFiles() {
 }
 
 async function confirmDeleteAll() {
+  console.log("Deleting all files");
   objectUrls.forEach(url => URL.revokeObjectURL(url));
   objectUrls.clear();
   try {
     await clearAllFileBlobs(await initDB());
+    console.log("Cleared all files from IndexedDB");
   } catch (error) {
     console.error("Error clearing IndexedDB:", error);
     handleError(error);
@@ -366,6 +398,7 @@ function cancelDeleteAll() {
 }
 
 async function forceUpdate() {
+  console.log("Checking for updates...");
   isUpdating.val = true;
   await updateServiceWorker(true).catch(e => console.error("Update error:", e));
   window.location.reload();
@@ -528,14 +561,17 @@ function App() {
 
 // Initialize
 (async () => {
+  console.log("Initializing app...");
   van.add(document.getElementById("app"), App());
   await loadData();
 
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('shared') === 'true') {
+    console.log("Processing shared files from URL param");
     await processSharedFiles();
     window.history.replaceState({}, document.title, window.location.pathname);
   } else if (urlParams.get('error') === 'share_failed') {
+    console.error("Share operation failed");
     const shareError = new Error(urlParams.get('error_msg') || 'Share failed');
     shareError.name = urlParams.get('error_name') || 'ShareError';
     displayError(shareError, { context: 'Android share' });
@@ -544,8 +580,13 @@ function App() {
     await processSharedFiles();
   }
 
+  console.log(`App initialized with ${mediaFiles.val.length} files`);
+
   // Auto-play last file
   const lastId = localStorage.getItem("lastPlayedFileId");
   const lastFile = lastId && mediaFiles.val.find((f) => f.id === lastId);
-  if (lastFile) playFile(lastFile);
+  if (lastFile) {
+    console.log(`Auto-playing last file: ${lastFile.name}`);
+    playFile(lastFile);
+  }
 })();
