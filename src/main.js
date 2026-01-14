@@ -679,10 +679,6 @@ function Sidebar() {
           ul(
             {},
             ...mediaFiles.val.map((file) => {
-              // Debug the file object
-              console.log("Rendering file in sidebar:", file);
-
-              // Ensure the file has a name
               const displayName = file.name || "Unnamed File";
 
               return li(
@@ -822,8 +818,7 @@ function MediaPlayer() {
         {
           class: "upload-prompt",
           style: van.derive(() => {
-            const shouldShow = isLoading.val ? false : mediaFiles.val.length === 0;
-            console.log(`Upload prompt visibility: ${shouldShow ? "visible" : "hidden"}`);
+            const shouldShow = !isLoading.val && mediaFiles.val.length === 0;
             return shouldShow ? "display: flex" : "display: none";
           }),
         },
