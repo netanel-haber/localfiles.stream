@@ -64,16 +64,72 @@ function handleError(error) {
 
 // Global error display function
 function displayError(error, errorInfo = {}) {
-  const errorText = error instanceof Error
-    ? `${error.name}: ${error.message}\n\n${error.stack || ''}`
-    : String(error);
+  console.error("Displaying error on screen:", error, errorInfo);
 
-  const extra = ['context', 'filename', 'lineno', 'colno', 'reason']
-    .filter(k => errorInfo[k])
-    .map(k => `${k}: ${errorInfo[k]}`)
-    .join('\n');
+  // Create error display container
+  const errorContainer = document.createElement("div");
+  errorContainer.id = "error-display";
+  errorContainer.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    color: black;
+    padding: 20px;
+    overflow: auto;
+    z-index: 99999;
+    font-family: monospace;
+  `;
 
-  document.body.innerHTML = `<pre style="background:white;color:black;padding:20px;margin:0;white-space:pre-wrap;height:100%;overflow:auto;font-family:monospace">APPLICATION ERROR\n\n${errorText}\n\n${extra}</pre>`;
+  // Create pre element for error content
+  const errorPre = document.createElement("pre");
+  errorPre.style.cssText = `
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+  `;
+
+  // Format error information
+  let errorText = "APPLICATION ERROR\n\n";
+
+  if (error instanceof Error) {
+    errorText += `Name: ${error.name}\n`;
+    errorText += `Message: ${error.message}\n\n`;
+    if (error.stack) {
+      errorText += `Stack Trace:\n${error.stack}\n\n`;
+    }
+  } else {
+    errorText += `Error: ${String(error)}\n\n`;
+  }
+
+  // Add additional error info
+  if (errorInfo.context) {
+    errorText += `Context: ${errorInfo.context}\n`;
+  }
+  if (errorInfo.filename) {
+    errorText += `File: ${errorInfo.filename}\n`;
+  }
+  if (errorInfo.lineno) {
+    errorText += `Line: ${errorInfo.lineno}\n`;
+  }
+  if (errorInfo.colno) {
+    errorText += `Column: ${errorInfo.colno}\n`;
+  }
+  if (errorInfo.reason) {
+    errorText += `\nRejection Reason:\n${errorInfo.reason}\n`;
+    if (errorInfo.promise) {
+      errorText += `Promise: ${errorInfo.promise}\n`;
+    }
+  }
+
+  errorPre.textContent = errorText;
+  errorContainer.appendChild(errorPre);
+
+  // Clear body and append error
+  document.body.innerHTML = "";
+  document.body.appendChild(errorContainer);
 }
 
 // Global error handler for uncaught exceptions
@@ -99,15 +155,25 @@ window.addEventListener("unhandledrejection", function(event) {
   event.preventDefault(); // Prevent default error handling
 });
 
-// Register service worker
+// Register service worker using Vite PWA's registration function
 let updateServiceWorker = () => Promise.resolve(false);
 if ("serviceWorker" in navigator) {
+  // Delay service worker registration until after page load
   window.addEventListener("load", () => {
-    updateServiceWorker = registerSW({ immediate: false });
+    // This will correctly handle both dev and prod environments
+    updateServiceWorker = registerSW({
+      immediate: false, // Changed from true to false for delayed registration
+      onRegistered(r) {
+        console.log("Service worker has been registered");
+      },
+      onRegisterError(error) {
+        console.error("Service worker registration error", error);
+      },
+    });
   });
 }
 
-const { div, header, main, aside, h1, h2, button, input, label, span, dialog, ul, li, p, a, img } = van.tags;
+const { div, header, main, aside, h1, h2, button, input, label, span, dialog, nav, ul, li, p, a, img } = van.tags;
 
 // App state using IndexedDB
 const mediaFiles = van.state([]);
@@ -115,46 +181,96 @@ const sidebarOpen = van.state(false);
 const isLoading = van.state(true);
 const isUpdating = van.state(false);
 
-// Object URL tracking
+// Object URL tracking for cleanup
 const objectUrls = new Map();
 
+// Function to create and track object URLs
 function createAndTrackObjectURL(file) {
-  if (!objectUrls.has(file.id)) {
-    objectUrls.set(file.id, URL.createObjectURL(file.file));
+  // Check if we already have an URL for this file
+  if (objectUrls.has(file.id)) {
+    return objectUrls.get(file.id);
   }
-  return objectUrls.get(file.id);
+
+  // Create a new URL
+  const url = URL.createObjectURL(file.file);
+  objectUrls.set(file.id, url);
+  console.log(`Created and tracked blob URL for ${file.id}: ${url}`);
+  return url;
 }
 
+// Function to release object URLs
 function releaseObjectURL(fileId) {
   if (objectUrls.has(fileId)) {
-    URL.revokeObjectURL(objectUrls.get(fileId));
+    const url = objectUrls.get(fileId);
+    URL.revokeObjectURL(url);
     objectUrls.delete(fileId);
+    console.log(`Released blob URL for ${fileId}`);
   }
 }
 
 // Initialize IndexedDB
 function initDB() {
   return new Promise((resolve, reject) => {
+    // Check for storage availability first
     if (!("indexedDB" in window)) {
-      return reject(new Error("IndexedDB is not supported"));
+      const error = new Error("IndexedDB is not supported in this browser");
+      console.error(error);
+      return reject(error);
     }
 
-    const request = indexedDB.open("localfilesDB", 2);
+    // Estimate storage usage and capacity
+    if (navigator.storage?.estimate) {
+      navigator.storage.estimate().then((estimate) => {
+        const percentUsed = (estimate.usage / estimate.quota) * 100;
+        console.log(`Storage usage: ${percentUsed.toFixed(2)}% of available quota`);
+        if (percentUsed > 80) {
+          console.warn("Storage is nearing capacity! Consider clearing some data.");
+        }
+      });
+    }
 
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
+    console.log("Opening IndexedDB...");
+    const request = indexedDB.open("localfilesDB", 2); // Updated version to match service worker
+
+    request.onupgradeneeded = (event) => {
+      console.log("Database upgrade needed, creating object stores");
+      const db = event.target.result;
       if (!db.objectStoreNames.contains("mediaFiles")) {
+        // Object store will now hold { id: fileId, blob: File }
         db.createObjectStore("mediaFiles", { keyPath: "id" });
+        console.log("mediaFiles object store created successfully");
       }
       if (!db.objectStoreNames.contains("sharedFiles")) {
+        // Object store for shared files from other apps
         db.createObjectStore("sharedFiles", { keyPath: "id" });
+        console.log("sharedFiles object store created successfully");
       }
     };
 
-    request.onsuccess = (e) => resolve(e.target.result);
-    request.onerror = (e) => {
-      alert(`Database error: ${e.target.error.message}`);
-      reject(e.target.error);
+    request.onsuccess = (event) => {
+      console.log("IndexedDB opened successfully");
+      const db = event.target.result;
+
+      // Setup error handler for the database
+      db.onerror = (event) => {
+        console.error("Database error:", event.target.errorCode);
+      };
+
+      resolve(db);
+    };
+
+    request.onerror = (event) => {
+      const error = event.target.error;
+      console.error("IndexedDB error:", error);
+
+      // Check for known error types
+      if (error.name === "QuotaExceededError") {
+        alert("Storage quota exceeded. Please delete some files before adding more.");
+      } else {
+        alert(`Database error: ${error.message}`);
+      }
+
+      reject(error);
     };
   });
 }
@@ -162,8 +278,12 @@ function initDB() {
 // IndexedDB Helper
 function dbOperation(db, storeName, mode, operation) {
   return new Promise((resolve, reject) => {
-    if (!db) return reject(new Error("Database not initialized"));
-    const request = operation(db.transaction(storeName, mode).objectStore(storeName));
+    if (!db) {
+      console.error(`Database not initialized`);
+      return reject(new Error("Database not initialized"));
+    }
+    const transaction = db.transaction(storeName, mode);
+    const request = operation(transaction.objectStore(storeName));
     request.onsuccess = () => resolve(request.result);
     request.onerror = (e) => reject(e.target.error);
   });
@@ -196,151 +316,306 @@ async function processSharedFiles() {
   try {
     const db = await initDB();
     const sharedFiles = await retrieveSharedFiles(db);
-    if (sharedFiles.length === 0) return false;
 
-    await addFiles(sharedFiles.map(f => f.file));
-    await clearSharedFiles(db);
-    alert(`${sharedFiles.length} shared file(s) added to your library!`);
-    return true;
+    if (sharedFiles.length > 0) {
+      console.log(`Found ${sharedFiles.length} shared files to process`);
+
+      // Convert shared files to the format expected by addFiles
+      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
+
+      // Add files to the main library
+      await addFiles(filesToAdd);
+
+      // Clear shared files after processing
+      await clearSharedFiles(db);
+
+      // Show notification
+      alert(`${sharedFiles.length} shared file(s) added to your library!`);
+
+      return true;
+    }
+
+    return false;
   } catch (error) {
     handleError(error);
     return false;
   }
 }
 
-// Local Storage Metadata
-const METADATA_KEY = "localFilesAppMetadata";
+// Local Storage Metadata Helper Functions
+const LOCAL_STORAGE_METADATA_KEY = "localFilesAppMetadata";
 
-function getMetadata() {
+function getMetadataFromLocalStorage() {
   try {
-    return JSON.parse(localStorage.getItem(METADATA_KEY)) || [];
-  } catch { return []; }
-}
-
-function saveMetadata(files) {
-  try {
-    localStorage.setItem(METADATA_KEY, JSON.stringify(files.map(({ file: _, ...meta }) => meta)));
-  } catch (e) {
-    if (e.name === "QuotaExceededError") alert("Storage full. Clear some browser data.");
+    const metadataJson = localStorage.getItem(LOCAL_STORAGE_METADATA_KEY);
+    return metadataJson ? JSON.parse(metadataJson) : [];
+  } catch (error) {
+    handleError(error);
+    return [];
   }
 }
 
-// Load data
+function saveMetadataToLocalStorage(metadataArray) {
+  try {
+    // Ensure we don't store the actual file blob in local storage
+    const storableMetadata = metadataArray.map((file) => {
+      const { file: blob, ...meta } = file; // eslint-disable-line no-unused-vars
+      return meta;
+    });
+    localStorage.setItem(LOCAL_STORAGE_METADATA_KEY, JSON.stringify(storableMetadata));
+  } catch (error) {
+    handleError(error);
+    if (error.name === "QuotaExceededError") {
+      alert("Local Storage quota exceeded. Cannot save file list. Please clear some browser data.");
+    }
+  }
+}
+
+// Load data (Refactored)
 const loadData = async () => {
   try {
     isLoading.val = true;
+    console.log("Loading data...");
     const db = await initDB();
-    const metadata = getMetadata();
+    const metadataArray = getMetadataFromLocalStorage();
+    console.log(`Loaded ${metadataArray.length} metadata entries from Local Storage.`);
 
-    const files = (await Promise.all(
-      metadata.map(async (meta) => {
+    const filesWithBlobs = [];
+    for (const meta of metadataArray) {
+      try {
         const blob = await retrieveFileBlob(db, meta.id);
-        return blob ? { ...meta, file: blob } : null;
-      })
-    )).filter(Boolean);
+        if (blob) {
+          filesWithBlobs.push({ ...meta, file: blob });
+        } else {
+          console.warn(`Blob not found in IndexedDB for file ID: ${meta.id}. Skipping file.`);
+        }
+      } catch (error) {
+        handleError(error);
+      }
+    }
 
-    mediaFiles.val = files;
+    mediaFiles.val = [...filesWithBlobs]; // Force reactivity
+    console.log(`Updated mediaFiles state with ${filesWithBlobs.length} files.`);
     isLoading.val = false;
+    return mediaFiles.val;
   } catch (error) {
     handleError(error);
     isLoading.val = false;
+    return [];
   }
 };
 
-// Add files
+// Much simpler file handling function (Refactored)
 async function addFiles(files) {
-  if (!files?.length) return;
+  // Made async
+  const MAX_FILE_SIZE = 1000 * 1024 * 1024; // 1000MB limit
 
-  const MAX_SIZE = 1000 * 1024 * 1024;
-  const db = await initDB();
+  if (!files || files.length === 0) {
+    console.error("No files selected");
+    return;
+  }
+
+  // Force remove any previous loading indicator
+  document.body.className = document.body.className.replace("is-uploading", "");
+
+  // Create temporary array
   const newFiles = [];
+  const db = await initDB(); // Initialize DB connection once
 
+  // Process each file
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (file.size > MAX_SIZE) {
-      alert(`File ${file.name} exceeds 1000MB limit.`);
+    const fileName = file.name || `shared-file-${Date.now()}-${i}.${file.type.split('/')[1] || 'bin'}`;
+    console.log(`Processing file ${i + 1}/${files.length}: ${fileName}`);
+
+    // Skip files that are too large
+    if (file.size > MAX_FILE_SIZE) {
+      alert(`File ${fileName} exceeds the 1000MB size limit.`);
       continue;
     }
 
+    // Create a unique ID for this file
+    const fileId = `file-${Date.now()}-${i}`;
+
+    // Create the file object with just the essential info
     const newFile = {
-      id: `file-${Date.now()}-${i}`,
-      name: file.name || `shared-${Date.now()}-${i}`,
+      id: fileId,
+      name: fileName,
       type: file.type,
       size: file.size,
-      file,
+      file: file, // Store the actual file object
       progress: 0,
       dateAdded: new Date().toISOString(),
     };
 
+    // Store the blob in IndexedDB
     try {
       await storeFileBlob(db, newFile.id, newFile.file);
-      newFiles.push(newFile);
+      console.log(`Blob for ${newFile.name} stored in IndexedDB.`);
+      newFiles.push(newFile); // Add to array only if blob storage is successful
     } catch (error) {
       handleError(error);
-      alert(`Could not save ${newFile.name}`);
+      alert(`Could not save file ${newFile.name} due to a storage error.`);
+      continue; // Skip this file
     }
+    console.log(`File ${fileName} processed successfully`);
   }
 
+  // Update the state with all new files at once
   if (newFiles.length > 0) {
+    console.log(`Adding ${newFiles.length} files to the library`);
+
     const updatedFiles = [...mediaFiles.val, ...newFiles];
     mediaFiles.val = updatedFiles;
-    saveMetadata(updatedFiles);
+
+    // Save metadata to Local Storage
+    saveMetadataToLocalStorage(updatedFiles);
+    console.log("File metadata saved to Local Storage.");
+
+    // Open the sidebar
     sidebarOpen.val = true;
-    alert(`${newFiles.length} files uploaded!`);
-    setTimeout(() => playFile(newFiles[0]), 500);
+
+    // Show confirmation
+    alert(`${newFiles.length} files uploaded successfully!`);
+
+    // Play the first new file
+    setTimeout(() => {
+      playFile(newFiles[0]);
+    }, 500);
   }
 }
 
-// Play file
+// Add a dedicated function to play files
 function playFile(file) {
-  const player = document.getElementById("media-player");
-  if (!player) return alert("Media player not found. Refresh the page.");
+  console.log("Attempting to play file:", file);
 
-  document.getElementById("video-container").style.display = "block";
-  document.querySelector(".upload-prompt")?.style.setProperty("display", "none");
+  try {
+    const player = document.getElementById("media-player");
+    if (!player) {
+      console.error("Media player element not found");
+      alert("Media player not found. Please refresh the page.");
+      return;
+    }
 
-  const sourceUrl = file.file instanceof File ? createAndTrackObjectURL(file) : file.data;
-  if (!sourceUrl) return alert(`Cannot play ${file.name}: Invalid source`);
+    // Make sure video container is visible
+    const videoContainer = document.getElementById("video-container");
+    if (videoContainer) {
+      videoContainer.style.display = "block";
+    }
 
-  player.src = sourceUrl;
-  player.setAttribute("data-current-file-id", file.id);
-  if (file.progress) player.currentTime = file.progress;
-  if (window.innerWidth < 768) sidebarOpen.val = false;
+    // Hide the upload prompt
+    const uploadPrompt = document.querySelector(".upload-prompt");
+    if (uploadPrompt) {
+      uploadPrompt.style.display = "none";
+    }
 
-  setTimeout(() => {
-    player.play()
-      .then(() => localStorage.setItem("lastPlayedFileId", file.id))
-      .catch(() => {});
-  }, 300);
+    // Get or create a URL for the file
+    let sourceUrl;
+    if (file.file && file.file instanceof File) {
+      // Create a tracked object URL
+      sourceUrl = createAndTrackObjectURL(file);
+    } else if (file.data && typeof file.data === "string") {
+      // Use existing data URL or blob URL
+      sourceUrl = file.data;
+    } else {
+      console.error("File has no playable source:", file);
+      alert(`Cannot play ${file.name || "file"}: Invalid source format`);
+      return;
+    }
+
+    // Set the source
+    console.log(`Setting player source to: ${sourceUrl}`);
+    player.src = sourceUrl;
+    player.setAttribute("data-current-file-id", file.id); // Tag player with file ID
+
+    // Set the time if available
+    if (typeof file.progress === "number") {
+      player.currentTime = file.progress;
+    }
+
+    // Close sidebar on mobile
+    if (window.innerWidth < 768) {
+      sidebarOpen.val = false;
+    }
+
+    // Force play with a slight delay
+    setTimeout(() => {
+      const playPromise = player.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log(`Playing ${file.name || "file"} successfully`);
+            // Store this as the last played file
+            try {
+              localStorage.setItem("lastPlayedFileId", file.id);
+              console.log(`Set lastPlayedFileId to: ${file.id}`);
+            } catch (e) {
+              console.warn("Could not save lastPlayedFileId to Local Storage:", e);
+            }
+          })
+          .catch(console.error);
+      }
+    }, 300);
+  } catch (error) {
+    handleError(error);
+    alert(`Error playing file: ${error.message}`);
+  }
 }
 
-// Delete file
+// Make sure to release URLs when files are deleted
 async function deleteFile(id) {
+  // Made async
+  console.log(`Deleting file with ID: ${id}`);
+
+  // Release any object URL for this file
   releaseObjectURL(id);
+
+  // Remove blob from IndexedDB
   try {
     const db = await initDB();
     await removeFileBlob(db, id);
+    console.log(`Blob for file ID ${id} removed from IndexedDB.`);
   } catch (error) {
     handleError(error);
   }
-  const updatedFiles = mediaFiles.val.filter((f) => f.id !== id);
+
+  // Remove from state
+  const updatedFiles = mediaFiles.val.filter((file) => file.id !== id);
   mediaFiles.val = updatedFiles;
-  saveMetadata(updatedFiles);
+
+  // Update metadata in Local Storage
+  saveMetadataToLocalStorage(updatedFiles);
+  console.log("File metadata updated in Local Storage after deletion.");
 }
 
 function deleteAllFiles() {
-  document.getElementById("confirm-dialog").showModal();
+  const confirmDialog = document.getElementById("confirm-dialog");
+  confirmDialog.showModal();
 }
 
 async function confirmDeleteAll() {
-  objectUrls.forEach(url => URL.revokeObjectURL(url));
+  // Made async
+  // Release all object URLs
+  objectUrls.forEach((url, id) => {
+    URL.revokeObjectURL(url);
+  });
   objectUrls.clear();
+
+  // Clear blobs from IndexedDB
   try {
-    await clearAllFileBlobs(await initDB());
+    const db = await initDB();
+    await clearAllFileBlobs(db);
+    console.log("All file blobs cleared from IndexedDB.");
   } catch (error) {
     handleError(error);
+    alert("Could not clear all stored file data. Please try again.");
   }
-  saveMetadata([]);
+
+  // Clear metadata from Local Storage
+  saveMetadataToLocalStorage([]);
+  console.log("File metadata cleared from Local Storage.");
+
+  // Clear files array in memory
   mediaFiles.val = [];
   document.getElementById("confirm-dialog").close();
 }
@@ -351,70 +626,173 @@ function cancelDeleteAll() {
 
 async function forceUpdate() {
   isUpdating.val = true;
-  await updateServiceWorker(true).catch(() => {});
-  window.location.reload();
+  console.log("Checking for updates...");
+
+  try {
+    // Try to update via service worker API
+    await updateServiceWorker(true);
+
+    // Always reload to ensure we get the latest - the SW API doesn't reliably
+    // tell us if an update was found
+    window.location.reload();
+  } catch (error) {
+    console.error("Error checking for updates:", error);
+    // Reload anyway to try to get latest
+    window.location.reload();
+  }
 }
 
 function updateProgress(id, currentTime) {
-  const updatedFiles = mediaFiles.val.map((f) => f.id === id ? { ...f, progress: currentTime } : f);
+  const updatedFiles = mediaFiles.val.map((file) => (file.id === id ? { ...file, progress: currentTime } : file));
   mediaFiles.val = updatedFiles;
-  saveMetadata(updatedFiles);
+
+  // Update metadata in Local Storage
+  saveMetadataToLocalStorage(updatedFiles);
 }
 
 // Components
 function Sidebar() {
   return aside(
-    { class: van.derive(() => `sidebar ${sidebarOpen.val ? "open" : ""}`) },
+    {
+      class: van.derive(() => `sidebar ${sidebarOpen.val ? "open" : ""}`),
+      "aria-label": "File sidebar",
+    },
     h2({}, "Your Files"),
     van.derive(() => {
-      if (isLoading.val) return div({ class: "loading-message" }, "Loading files...");
-      if (mediaFiles.val.length === 0) return div({ class: "empty-message" }, "No files added yet");
+      if (isLoading.val) {
+        return div({ class: "loading-message" }, "Loading files...");
+      }
 
-      return div({},
-        ul({}, ...mediaFiles.val.map((file) =>
-          li({ class: "file-item" },
-            span({ onclick: () => playFile(file), class: "file-name" }, file.name || "Unnamed"),
-            button({ class: "delete-btn outline", onclick: (e) => { e.stopPropagation(); deleteFile(file.id); } }, "×"),
-          )
-        )),
-        button({ class: "delete-all-btn outline", onclick: deleteAllFiles }, "Delete All"),
-      );
+      if (mediaFiles.val.length > 0) {
+        return div(
+          {},
+          ul(
+            {},
+            ...mediaFiles.val.map((file) => {
+              const displayName = file.name || "Unnamed File";
+
+              return li(
+                {
+                  class: "file-item",
+                  "data-id": file.id,
+                },
+                span(
+                  {
+                    onclick: () => {
+                      console.log("Clicked on file:", file);
+                      playFile(file);
+                    },
+                    class: "file-name",
+                  },
+                  displayName,
+                ),
+                button(
+                  {
+                    class: "delete-btn outline",
+                    onclick: (e) => {
+                      e.stopPropagation();
+                      console.log(`Deleting file: ${file.id}`);
+                      deleteFile(file.id);
+                    },
+                  },
+                  "×",
+                ),
+              );
+            }),
+          ),
+          button(
+            {
+              class: "delete-all-btn outline",
+              onclick: deleteAllFiles,
+            },
+            "Delete All",
+          ),
+        );
+      }
+      return div({ class: "empty-message" }, "No files added yet");
     }),
-    div({ class: "sidebar-footer" },
-      div({ class: "sidebar-footer-buttons" },
-        button({
-          class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
-          onclick: () => { debugMode.val = !debugMode.val; localStorage.setItem("debugMode", debugMode.val); },
-        }, van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF")),
-        button({
-          class: "force-update-btn",
-          onclick: forceUpdate,
-          disabled: van.derive(() => isUpdating.val),
-        }, van.derive(() => isUpdating.val ? "Checking..." : "Check for Updates")),
+    div(
+      { class: "sidebar-footer" },
+      div(
+        { class: "sidebar-footer-buttons" },
+        button(
+          {
+            class: van.derive(() => `debug-toggle ${debugMode.val ? "active" : ""}`),
+            onclick: () => {
+              debugMode.val = !debugMode.val;
+              localStorage.setItem("debugMode", debugMode.val);
+            },
+          },
+          van.derive(() => debugMode.val ? "Debug: ON" : "Debug: OFF"),
+        ),
+        button(
+          {
+            class: "force-update-btn",
+            onclick: forceUpdate,
+            disabled: van.derive(() => isUpdating.val),
+          },
+          van.derive(() => isUpdating.val ? "Checking..." : "Check for Updates"),
+        ),
       ),
-      a({ href: `https://github.com/netanel-haber/localfiles.stream/commit/${__COMMIT_SHA__}`, target: "_blank", class: "commit-link" }, __COMMIT_SHA__.substring(0, 7)),
+      a(
+        {
+          href: `https://github.com/netanel-haber/localfiles.stream/commit/${__COMMIT_SHA__}`,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          class: "commit-link",
+        },
+        `${__COMMIT_SHA__.substring(0, 7)}`,
+      ),
     ),
   );
 }
 
 function Header() {
-  return header({},
+  return header(
+    {},
+
     div(
-      button({ class: "hamburger outline", onclick: () => sidebarOpen.val = !sidebarOpen.val }, "☰"),
+      button(
+        {
+          class: "hamburger outline",
+          onclick: () => {
+            sidebarOpen.val = !sidebarOpen.val;
+          },
+        },
+        "☰",
+      ),
       h1({}, "localfiles.stream"),
       div({ class: "github-link" },
-        a({ href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
-          img({ src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png", alt: "GitHub" }),
+        a(
+          { href: "https://github.com/netanel-haber/localfiles.stream", target: "_blank" },
+          img({
+            src: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+            alt: "GitHub",
+          }),
         ),
       ),
     ),
     div(
       label({ class: "upload-btn", for: "file-upload" }, "Upload Files"),
       input({
-        type: "file", id: "file-upload", accept: "audio/*,video/*", multiple: true, style: "display: none",
+        type: "file",
+        id: "file-upload",
+        accept: "audio/*,video/*",
+        multiple: true,
+        style: "display: none",
         onchange: async (e) => {
-          if (e.target.files?.length) await addFiles(e.target.files);
-          e.target.value = "";
+          try {
+            if (e.target.files && e.target.files.length > 0) {
+              await addFiles(e.target.files);
+              console.log(`Selected ${e.target.files.length} files`);
+            } else {
+              console.log("No files selected");
+            }
+            e.target.value = ""; // Reset input to allow selecting the same file again
+          } catch (error) {
+            handleError(error);
+            alert("Failed to process selected files. Please try again.");
+          }
         },
       }),
     ),
@@ -422,32 +800,64 @@ function Header() {
 }
 
 function MediaPlayer() {
-  return div({ class: "media-container" },
-    div({ class: "player-wrapper" },
-      div({
-        class: "upload-prompt",
-        style: van.derive(() => !isLoading.val && mediaFiles.val.length === 0 ? "display: flex" : "display: none"),
-      }, "Upload media files to start playing"),
-      div({
-        class: "loading-indicator",
-        style: van.derive(() => isLoading.val ? "display: flex" : "display: none"),
-      }, "Loading your media files..."),
-      div({ id: "video-container", class: "video-container", style: "display: none;" },
-        div({ class: "media-element-container" },
+  return div(
+    { class: "media-container" },
+    div(
+      { class: "player-wrapper" },
+      div(
+        {
+          class: "upload-prompt",
+          style: van.derive(() => {
+            const shouldShow = !isLoading.val && mediaFiles.val.length === 0;
+            return shouldShow ? "display: flex" : "display: none";
+          }),
+        },
+        "Upload media files to start playing",
+      ),
+      div(
+        {
+          class: "loading-indicator",
+          style: van.derive(() => (isLoading.val ? "display: flex" : "display: none")),
+        },
+        "Loading your media files...",
+      ),
+      div(
+        {
+          id: "video-container",
+          class: "video-container",
+          style: "display: none;", // Initially hidden, will be shown when playing
+        },
+        div(
+          { class: "media-element-container" },
+          // Using a video element that can also play audio
           van.tags.video({
-            id: "media-player", controls: true, playsinline: true,
+            id: "media-player",
+            controls: true,
+            preload: "auto",
+            controlsList: "nodownload",
+            crossorigin: "anonymous",
+            playsinline: true,
             ontimeupdate: (e) => {
               const fileId = e.target.getAttribute("data-current-file-id");
-              if (fileId) updateProgress(fileId, e.target.currentTime);
+              if (fileId) {
+                updateProgress(fileId, e.target.currentTime);
+              }
+            },
+            onplay: (e) => {
+              console.log("Media started playing. File ID:", e.target.getAttribute("data-current-file-id"));
             },
             onended: (e) => {
+              console.log("Media ended. Saving final progress.");
               const fileId = e.target.getAttribute("data-current-file-id");
-              if (fileId && Number.isFinite(e.target.duration)) updateProgress(fileId, e.target.duration);
-              e.target.removeAttribute("data-current-file-id");
+              if (fileId && e.target.duration && Number.isFinite(e.target.duration)) {
+                updateProgress(fileId, e.target.duration); // Save final position as full duration
+              }
+              e.target.removeAttribute("data-current-file-id"); // Clean up
             },
             onerror: (e) => {
-              alert(`Error playing: ${e.target.error?.message || "Unknown error"}`);
-              e.target.removeAttribute("data-current-file-id");
+              console.error("Media player error:", e.target.error);
+              alert(`Error playing media: ${e.target.error ? e.target.error.message : "Unknown error"}`);
+              e.target.removeAttribute("data-current-file-id"); // Clean up
             },
           }),
         ),
@@ -458,11 +868,14 @@ function MediaPlayer() {
 }
 
 function ConfirmDialog() {
-  return dialog({ id: "confirm-dialog" },
-    div({ class: "dialog-content" },
+  return dialog(
+    { id: "confirm-dialog" },
+    div(
+      { class: "dialog-content" },
       h2({}, "Confirm Deletion"),
       p({}, "Are you sure you want to delete all files?"),
-      div({ class: "dialog-buttons" },
+      div(
+        { class: "dialog-buttons" },
         button({ onclick: cancelDeleteAll, class: "secondary" }, "Cancel"),
         button({ onclick: confirmDeleteAll }, "Delete All"),
       ),
@@ -471,65 +884,162 @@ function ConfirmDialog() {
 }
 
 function ConsoleLogViewer() {
-  return div({
-    class: van.derive(() => `console-viewer ${debugMode.val ? '' : 'hidden'} ${consoleLogViewerOpen.val ? 'open' : 'closed'}`),
-  },
-    div({ class: "console-header" },
+  // Use a stable container that's always rendered, with CSS controlling visibility
+  return div(
+    {
+      class: van.derive(() => {
+        const classes = ['console-viewer'];
+        if (!debugMode.val) classes.push('hidden');
+        if (consoleLogViewerOpen.val) classes.push('open');
+        else classes.push('closed');
+        return classes.join(' ');
+      }),
+    },
+    div(
+      { class: "console-header" },
       van.derive(() => span({}, `Console (${consoleLogs.val.length})`)),
-      div({ class: "console-controls" },
-        button({ class: "console-btn", onclick: () => consoleLogs.val = [] }, "Clear"),
-        button({ class: "console-btn", onclick: () => consoleLogViewerOpen.val = !consoleLogViewerOpen.val },
-          van.derive(() => consoleLogViewerOpen.val ? "▼" : "▲")),
+      div(
+        { class: "console-controls" },
+        button(
+          {
+            class: "console-btn",
+            onclick: () => {
+              consoleLogs.val = [];
+            },
+          },
+          "Clear"
+        ),
+        button(
+          {
+            class: "console-btn",
+            onclick: () => {
+              consoleLogViewerOpen.val = !consoleLogViewerOpen.val;
+            },
+          },
+          van.derive(() => consoleLogViewerOpen.val ? "▼" : "▲")
+        ),
       ),
     ),
     van.derive(() => {
       if (!consoleLogViewerOpen.val) return div({ class: "console-logs", style: "display: none;" });
-      setTimeout(() => {
-        const c = document.getElementById('console-logs-container');
-        if (c) c.scrollTop = c.scrollHeight;
-      }, 10);
-      return div({ class: "console-logs", id: "console-logs-container" },
-        ...consoleLogs.val.map((log) =>
-          div({ class: `console-entry console-${log.level}` },
+
+      return div(
+        {
+          class: "console-logs",
+          id: "console-logs-container",
+        },
+        ...consoleLogs.val.map((log) => {
+          return div(
+            { class: `console-entry console-${log.level}` },
             span({ class: "console-timestamp" }, log.timestamp),
             span({ class: "console-level" }, log.level.toUpperCase()),
             van.tags.pre({ class: "console-message" }, log.message),
-          )
-        )
+          );
+        })
       );
     })
   );
 }
 
+// Auto-scroll console to bottom when new logs are added
+van.derive(() => {
+  if (consoleLogViewerOpen.val && consoleLogs.val.length > 0) {
+    setTimeout(() => {
+      const container = document.getElementById('console-logs-container');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 10);
+  }
+});
+
 // Main App
 function App() {
-  return div({ id: "layout" },
+  return div(
+    { id: "layout" },
     Header(),
     div({ class: "content" }, Sidebar(), main({}, MediaPlayer())),
     ConfirmDialog(),
   );
 }
 
-// Initialize
+// Initialize app
 (async () => {
-  van.add(document.getElementById("app"), App());
-  await loadData();
+  // Clear IndexedDB and LocalStorage in development mode
+  const isDevelopment = import.meta.env.DEV;
 
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('shared') === 'true') {
-    await processSharedFiles();
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } else if (urlParams.get('error') === 'share_failed') {
-    const shareError = new Error(urlParams.get('error_msg') || 'Share failed');
-    shareError.name = urlParams.get('error_name') || 'ShareError';
-    displayError(shareError, { context: 'Android share' });
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } else {
-    await processSharedFiles();
+  try {
+    // Force isLoading to be true at start
+    isLoading.val = true;
+
+    // Mount the app first
+    console.log("Mounting app...");
+    van.add(document.getElementById("app"), App());
+
+    // Now load data
+    await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay to ensure DOM is ready
+
+    console.log("Loading data...");
+    await loadData();
+
+    // Check for shared files (from Web Share Target API)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('shared') === 'true') {
+      console.log("App opened with shared files, processing...");
+      await processSharedFiles();
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (urlParams.get('error') === 'share_failed') {
+      console.error("Share operation failed");
+
+      // Get error details from URL params
+      const errorMsg = urlParams.get('error_msg');
+      const errorName = urlParams.get('error_name');
+
+      // Create a detailed error to display
+      const shareError = new Error(errorMsg || 'Failed to share files');
+      shareError.name = errorName || 'ShareError';
+
+      // Display the error on screen
+      displayError(shareError, {
+        message: 'Service worker share handler failed',
+        context: 'Android share operation'
+      });
+
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // Check for shared files anyway (in case URL params were missed)
+      await processSharedFiles();
+    }
+
+    console.log(`App initialized with ${mediaFiles.val.length} files`);
+
+    // Attempt to play the last played file
+    if (mediaFiles.val.length > 0) {
+      try {
+        const lastPlayedFileId = localStorage.getItem("lastPlayedFileId");
+        if (lastPlayedFileId) {
+          console.log(`Found lastPlayedFileId: ${lastPlayedFileId}`);
+          const fileToPlay = mediaFiles.val.find((f) => f.id === lastPlayedFileId);
+          if (fileToPlay) {
+            console.log("Attempting to autoplay last played file:", fileToPlay);
+            playFile(fileToPlay);
+          } else {
+            console.log("Last played file ID found, but file not in current media list.");
+          }
+        }
+      } catch (e) {
+        console.warn("Could not retrieve or play lastPlayedFileId:", e);
+      }
+    }
+
+    // Make sure UI is updated
+    if (mediaFiles.val.length > 0) {
+      console.log("Files found, showing sidebar");
+    }
+  } catch (error) {
+    handleError(error);
+    isLoading.val = false;
   }
-
-  // Auto-play last file
-  const lastId = localStorage.getItem("lastPlayedFileId");
-  const lastFile = lastId && mediaFiles.val.find((f) => f.id === lastId);
-  if (lastFile) playFile(lastFile);
 })();
