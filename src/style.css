@@ -390,6 +390,17 @@ img {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 1rem);
+  max-width: 800px;
+  z-index: 1000;
+}
+
+.console-viewer.hidden {
+  display: none;
 }
 
 .console-viewer.closed {
@@ -397,7 +408,22 @@ img {
 }
 
 .console-viewer.open {
-  height: 300px;
+  height: 50vh;
+  max-height: 400px;
+}
+
+@media (min-width: 768px) {
+  .console-viewer {
+    left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
+    width: calc(100% - var(--sidebar-width) - 2rem);
+    max-width: 900px;
+    font-size: 12px;
+  }
+
+  .console-viewer.open {
+    height: 50vh;
+    max-height: 500px;
+  }
 }
 
 .console-header {

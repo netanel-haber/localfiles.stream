@@ -964,58 +964,60 @@ function ConfirmDialog() {
 }
 
 function ConsoleLogViewer() {
-  return van.derive(() => {
-    if (!debugMode.val) return null;
-
-    return div(
-      {
-        class: van.derive(() => `console-viewer ${consoleLogViewerOpen.val ? 'open' : 'closed'}`),
-      },
+  // Use a stable container that's always rendered, with CSS controlling visibility
+  return div(
+    {
+      class: van.derive(() => {
+        const classes = ['console-viewer'];
+        if (!debugMode.val) classes.push('hidden');
+        if (consoleLogViewerOpen.val) classes.push('open');
+        else classes.push('closed');
+        return classes.join(' ');
+      }),
+    },
+    div(
+      { class: "console-header" },
+      van.derive(() => span({}, `Console (${consoleLogs.val.length})`)),
       div(
-        { class: "console-header" },
-        span({}, `Console (${consoleLogs.val.length})`),
-        div(
-          { class: "console-controls" },
-          button(
-            {
-              class: "console-btn",
-              onclick: () => {
-                consoleLogs.val = [];
-              },
+        { class: "console-controls" },
+        button(
+          {
+            class: "console-btn",
+            onclick: () => {
+              consoleLogs.val = [];
             },
-            "Clear"
-          ),
-          button(
-            {
-              class: "console-btn",
-              onclick: () => {
-                consoleLogViewerOpen.val = !consoleLogViewerOpen.val;
-              },
+          },
+          "Clear"
+        ),
+        button(
+          {
+            class: "console-btn",
+            onclick: () => {
+              consoleLogViewerOpen.val = !consoleLogViewerOpen.val;
             },
-            van.derive(() => consoleLogViewerOpen.val ? "▼" : "▲")
-          ),
+          },
+          van.derive(() => consoleLogViewerOpen.val ? "▼" : "▲")
         ),
       ),
+    ),
+    div(
+      {
+        class: "console-logs",
+        id: "console-logs-container",
+        style: van.derive(() => consoleLogViewerOpen.val ? "" : "display: none;"),
+      },
       van.derive(() => {
-        if (!consoleLogViewerOpen.val) return null;
-
-        return div(
-          {
-            class: "console-logs",
-            id: "console-logs-container"
-          },
-          ...consoleLogs.val.map((log) => {
-            return div(
-              { class: `console-entry console-${log.level}` },
-              span({ class: "console-timestamp" }, log.timestamp),
-              span({ class: "console-level" }, log.level.toUpperCase()),
-              van.tags.pre({ class: "console-message" }, log.message),
-            );
-          })
-        );
+        return consoleLogs.val.map((log) => {
+          return div(
+            { class: `console-entry console-${log.level}` },
+            span({ class: "console-timestamp" }, log.timestamp),
+            span({ class: "console-level" }, log.level.toUpperCase()),
+            van.tags.pre({ class: "console-message" }, log.message),
+          );
+        });
       })
-    );
-  });
+    )
+  );
 }
 
 // Auto-scroll console to bottom when new logs are added
