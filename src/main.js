@@ -511,7 +511,7 @@ function playFile(file) {
 
     // Get or create a URL for the file
     let sourceUrl;
-    if (file.file && file.file instanceof File) {
+    if (file.file && file.file instanceof Blob) {
       // Create a tracked object URL
       sourceUrl = createAndTrackObjectURL(file);
     } else if (file.data && typeof file.data === "string") {
@@ -835,7 +835,6 @@ function MediaPlayer() {
             controls: true,
             preload: "auto",
             controlsList: "nodownload",
-            crossorigin: "anonymous",
             playsinline: true,
             ontimeupdate: (e) => {
               const fileId = e.target.getAttribute("data-current-file-id");
