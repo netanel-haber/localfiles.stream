@@ -625,30 +625,20 @@ function cancelDeleteAll() {
 }
 
 async function forceUpdate() {
-  if (!updateServiceWorker) {
-    console.log("Update service worker function not available yet");
-    alert("Update service not ready. Please try again in a moment.");
-    return;
-  }
-
   isUpdating.val = true;
   console.log("Checking for updates...");
 
   try {
-    const needsRefresh = await updateServiceWorker(true);
+    // Try to update via service worker API
+    await updateServiceWorker(true);
 
-    if (needsRefresh) {
-      console.log("Update found and installed, reloading...");
-      window.location.reload();
-    } else {
-      console.log("No update available, already on latest version");
-      alert("You're already running the latest version!");
-      isUpdating.val = false;
-    }
+    // Always reload to ensure we get the latest - the SW API doesn't reliably
+    // tell us if an update was found
+    window.location.reload();
   } catch (error) {
     console.error("Error checking for updates:", error);
-    alert("Failed to check for updates. Please try again.");
-    isUpdating.val = false;
+    // Reload anyway to try to get latest
+    window.location.reload();
   }
 }
 
