@@ -3,8 +3,9 @@
 ## Project Shape
 
 - This is a small Vite + VanJS app.
-- Most app logic lives in `src/main.js`.
-- Most UI styling lives in `src/style.css`.
+- Most app logic lives in `main.js`.
+- Most UI styling lives in `style.css`.
+- `index.html` loads the app from `/main.js`; there is no `src/` nesting anymore.
 - Media metadata is persisted across Local Storage and IndexedDB. Preserve compatibility when adding fields by normalizing missing values.
 
 ## Current UX Expectations
