@@ -180,6 +180,7 @@ const mediaFiles = van.state([]);
 const sidebarOpen = van.state(false);
 const isLoading = van.state(true);
 const isUpdating = van.state(false);
+const currentFileId = van.state(null);
 
 // Object URL tracking for cleanup
 const objectUrls = new Map();
@@ -206,6 +207,86 @@ function releaseObjectURL(fileId) {
     objectUrls.delete(fileId);
     console.log(`Released blob URL for ${fileId}`);
   }
+}
+
+function normalizeMediaFileRecord(file) {
+  const progress = Number.isFinite(file.progress) ? file.progress : 0;
+  const duration = Number.isFinite(file.duration) ? file.duration : 0;
+  const interactedAt = typeof file.interactedAt === "string" ? file.interactedAt : null;
+  const isNew = typeof file.isNew === "boolean"
+    ? file.isNew
+    : !(interactedAt || progress > 0 || duration > 0);
+
+  return {
+    ...file,
+    progress,
+    duration,
+    interactedAt,
+    isNew,
+  };
+}
+
+function saveMediaFiles(updatedFiles) {
+  mediaFiles.val = updatedFiles;
+  saveMetadataToLocalStorage(updatedFiles);
+}
+
+function updateMediaFile(id, updater) {
+  let didUpdate = false;
+  const updatedFiles = mediaFiles.val.map((file) => {
+    if (file.id !== id) {
+      return file;
+    }
+
+    const nextFile = updater(file);
+    if (nextFile === file) {
+      return file;
+    }
+
+    didUpdate = true;
+    return normalizeMediaFileRecord(nextFile);
+  });
+
+  if (didUpdate) {
+    saveMediaFiles(updatedFiles);
+  }
+}
+
+function markFileInteracted(id) {
+  updateMediaFile(id, (file) => {
+    if (!file.isNew && file.interactedAt) {
+      return file;
+    }
+
+    return {
+      ...file,
+      isNew: false,
+      interactedAt: file.interactedAt || new Date().toISOString(),
+    };
+  });
+}
+
+function updateDuration(id, duration) {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return;
+  }
+
+  updateMediaFile(id, (file) => (
+    file.duration === duration ? file : { ...file, duration }
+  ));
+}
+
+function getCurrentFile() {
+  return mediaFiles.val.find((file) => file.id === currentFileId.val) || null;
+}
+
+function getFileProgressPercent(file) {
+  if (!file || !Number.isFinite(file.duration) || file.duration <= 0) {
+    return 0;
+  }
+
+  const currentProgress = Number.isFinite(file.progress) ? file.progress : 0;
+  return Math.max(0, Math.min(100, (currentProgress / file.duration) * 100));
 }
 
 // Initialize IndexedDB
@@ -385,7 +466,7 @@ const loadData = async () => {
       try {
         const blob = await retrieveFileBlob(db, meta.id);
         if (blob) {
-          filesWithBlobs.push({ ...meta, file: blob });
+          filesWithBlobs.push(normalizeMediaFileRecord({ ...meta, file: blob }));
         } else {
           console.warn(`Blob not found in IndexedDB for file ID: ${meta.id}. Skipping file.`);
         }
@@ -438,15 +519,18 @@ async function addFiles(files) {
     const fileId = `file-${Date.now()}-${i}`;
 
     // Create the file object with just the essential info
-    const newFile = {
+    const newFile = normalizeMediaFileRecord({
       id: fileId,
       name: fileName,
       type: file.type,
       size: file.size,
       file: file, // Store the actual file object
       progress: 0,
+      duration: 0,
+      isNew: true,
+      interactedAt: null,
       dateAdded: new Date().toISOString(),
-    };
+    });
 
     // Store the blob in IndexedDB
     try {
@@ -466,10 +550,7 @@ async function addFiles(files) {
     console.log(`Adding ${newFiles.length} files to the library`);
 
     const updatedFiles = [...mediaFiles.val, ...newFiles];
-    mediaFiles.val = updatedFiles;
-
-    // Save metadata to Local Storage
-    saveMetadataToLocalStorage(updatedFiles);
+    saveMediaFiles(updatedFiles);
     console.log("File metadata saved to Local Storage.");
 
     // Open the sidebar
@@ -480,13 +561,13 @@ async function addFiles(files) {
 
     // Play the first new file
     setTimeout(() => {
-      playFile(newFiles[0]);
+      playFile(newFiles[0], { markInteracted: true });
     }, 500);
   }
 }
 
 // Add a dedicated function to play files
-function playFile(file) {
+function playFile(file, { markInteracted = false } = {}) {
   console.log("Attempting to play file:", file);
 
   try {
@@ -525,6 +606,10 @@ function playFile(file) {
 
     // Set the source
     console.log(`Setting player source to: ${sourceUrl}`);
+    if (markInteracted) {
+      markFileInteracted(file.id);
+    }
+    currentFileId.val = file.id;
     player.src = sourceUrl;
     player.setAttribute("data-current-file-id", file.id); // Tag player with file ID
 
@@ -562,6 +647,37 @@ function playFile(file) {
   }
 }
 
+function clearCurrentFileSelection(fileId = currentFileId.val) {
+  if (!fileId) {
+    return;
+  }
+
+  if (currentFileId.val === fileId) {
+    currentFileId.val = null;
+  }
+
+  const player = document.getElementById("media-player");
+  if (player?.getAttribute("data-current-file-id") === fileId) {
+    player.pause();
+    player.removeAttribute("data-current-file-id");
+    player.removeAttribute("src");
+    player.load();
+  }
+
+  const videoContainer = document.getElementById("video-container");
+  if (videoContainer) {
+    videoContainer.style.display = "none";
+  }
+
+  try {
+    if (localStorage.getItem("lastPlayedFileId") === fileId) {
+      localStorage.removeItem("lastPlayedFileId");
+    }
+  } catch (error) {
+    console.warn("Could not update lastPlayedFileId in Local Storage:", error);
+  }
+}
+
 // Make sure to release URLs when files are deleted
 async function deleteFile(id) {
   // Made async
@@ -581,10 +697,13 @@ async function deleteFile(id) {
 
   // Remove from state
   const updatedFiles = mediaFiles.val.filter((file) => file.id !== id);
-  mediaFiles.val = updatedFiles;
+
+  if (currentFileId.val === id) {
+    clearCurrentFileSelection(id);
+  }
 
   // Update metadata in Local Storage
-  saveMetadataToLocalStorage(updatedFiles);
+  saveMediaFiles(updatedFiles);
   console.log("File metadata updated in Local Storage after deletion.");
 }
 
@@ -595,6 +714,8 @@ function deleteAllFiles() {
 
 async function confirmDeleteAll() {
   // Made async
+  clearCurrentFileSelection();
+
   // Release all object URLs
   objectUrls.forEach((url, id) => {
     URL.revokeObjectURL(url);
@@ -612,11 +733,8 @@ async function confirmDeleteAll() {
   }
 
   // Clear metadata from Local Storage
-  saveMetadataToLocalStorage([]);
+  saveMediaFiles([]);
   console.log("File metadata cleared from Local Storage.");
-
-  // Clear files array in memory
-  mediaFiles.val = [];
   document.getElementById("confirm-dialog").close();
 }
 
@@ -643,11 +761,7 @@ async function forceUpdate() {
 }
 
 function updateProgress(id, currentTime) {
-  const updatedFiles = mediaFiles.val.map((file) => (file.id === id ? { ...file, progress: currentTime } : file));
-  mediaFiles.val = updatedFiles;
-
-  // Update metadata in Local Storage
-  saveMetadataToLocalStorage(updatedFiles);
+  updateMediaFile(id, (file) => ({ ...file, progress: currentTime }));
 }
 
 // Components
@@ -657,8 +771,9 @@ function Sidebar() {
       class: van.derive(() => `sidebar ${sidebarOpen.val ? "open" : ""}`),
       "aria-label": "File sidebar",
     },
-    h2({}, "Your Files"),
     van.derive(() => {
+      const activeFileId = currentFileId.val;
+
       if (isLoading.val) {
         return div({ class: "loading-message" }, "Loading files...");
       }
@@ -673,18 +788,39 @@ function Sidebar() {
 
               return li(
                 {
-                  class: "file-item",
+                  class: `file-item${activeFileId === file.id ? " is-current" : ""}`,
                   "data-id": file.id,
                 },
-                span(
+                div(
                   {
+                    class: "file-entry",
+                    role: "button",
+                    tabindex: 0,
                     onclick: () => {
                       console.log("Clicked on file:", file);
-                      playFile(file);
+                      playFile(file, { markInteracted: true });
                     },
-                    class: "file-name",
+                    onkeydown: (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        playFile(file, { markInteracted: true });
+                      }
+                    },
                   },
-                  displayName,
+                  div(
+                    { class: "file-title-row" },
+                    span({ class: "file-name" }, displayName),
+                    file.isNew ? span({ class: "new-badge" }, "New") : null,
+                  ),
+                  div(
+                    { class: "title-progress-track", "aria-hidden": "true" },
+                    span(
+                      {
+                        class: "title-progress-fill",
+                        style: `width: ${getFileProgressPercent(file).toFixed(2)}%`,
+                      },
+                    ),
+                  ),
                 ),
                 button(
                   {
@@ -804,6 +940,30 @@ function MediaPlayer() {
     { class: "media-container" },
     div(
       { class: "player-wrapper" },
+      van.derive(() => {
+        const currentFile = getCurrentFile();
+        if (!currentFile) {
+          return null;
+        }
+
+        return div(
+          { class: "current-media-header" },
+          div(
+            { class: "current-media-title-row" },
+            span({ class: "current-media-title" }, currentFile.name || "Unnamed File"),
+            currentFile.isNew ? span({ class: "new-badge current-media-badge" }, "New") : null,
+          ),
+          div(
+            { class: "title-progress-track current-title-progress", "aria-hidden": "true" },
+            span(
+              {
+                class: "title-progress-fill",
+                style: `width: ${getFileProgressPercent(currentFile).toFixed(2)}%`,
+              },
+            ),
+          ),
+        );
+      }),
       div(
         {
           class: "upload-prompt",
@@ -836,6 +996,18 @@ function MediaPlayer() {
             preload: "auto",
             controlsList: "nodownload",
             playsinline: true,
+            onloadedmetadata: (e) => {
+              const fileId = e.target.getAttribute("data-current-file-id");
+              if (fileId) {
+                updateDuration(fileId, e.target.duration);
+              }
+            },
+            ondurationchange: (e) => {
+              const fileId = e.target.getAttribute("data-current-file-id");
+              if (fileId) {
+                updateDuration(fileId, e.target.duration);
+              }
+            },
             ontimeupdate: (e) => {
               const fileId = e.target.getAttribute("data-current-file-id");
               if (fileId) {
@@ -856,6 +1028,10 @@ function MediaPlayer() {
             onerror: (e) => {
               console.error("Media player error:", e.target.error);
               alert(`Error playing media: ${e.target.error ? e.target.error.message : "Unknown error"}`);
+              const fileId = e.target.getAttribute("data-current-file-id");
+              if (fileId && currentFileId.val === fileId) {
+                currentFileId.val = null;
+              }
               e.target.removeAttribute("data-current-file-id"); // Clean up
             },
           }),
@@ -1023,7 +1199,7 @@ function App() {
           const fileToPlay = mediaFiles.val.find((f) => f.id === lastPlayedFileId);
           if (fileToPlay) {
             console.log("Attempting to autoplay last played file:", fileToPlay);
-            playFile(fileToPlay);
+            playFile(fileToPlay, { markInteracted: true });
           } else {
             console.log("Last played file ID found, but file not in current media list.");
           }

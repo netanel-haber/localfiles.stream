@@ -102,25 +102,85 @@ header nav {
 .sidebar li {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 0.75rem;
   padding: 0.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background-color: rgba(255, 255, 255, 0.05);
   margin-bottom: 0.5rem;
   border-radius: 4px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sidebar li.file-item.is-current {
+  background: linear-gradient(90deg, rgba(100, 108, 255, 0.28), rgba(255, 255, 255, 0.08));
+  border-bottom-color: rgba(100, 108, 255, 0.55);
+  box-shadow: inset 3px 0 0 var(--primary-color), 0 0 0 1px rgba(100, 108, 255, 0.2);
+}
+
+.sidebar li.file-item.is-current .file-name {
+  color: #fff;
+  font-weight: 600;
+}
+
+.file-entry {
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.file-entry:hover .file-name {
+  color: var(--primary-color);
+}
+
+.file-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .file-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1 1 160px;
+  min-width: 0;
   cursor: pointer;
-  padding: 0.25rem 0;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
-.file-name:hover {
-  color: var(--primary-color);
+.new-badge {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 77, 77, 0.18);
+  border: 1px solid rgba(255, 77, 77, 0.45);
+  color: #ff8e8e;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.title-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.title-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #ff4d4d;
+  transition: width 0.2s ease;
 }
 
 .delete-btn {
@@ -129,8 +189,10 @@ header nav {
   color: #ff4d4d;
   cursor: pointer;
   font-size: 1.2rem;
-  padding: 0 0.5rem;
-  margin-left: 0.5rem;
+  padding: 0;
+  margin-left: 0;
+  align-self: flex-start;
+  line-height: 1;
 }
 
 .delete-all-btn {
@@ -179,6 +241,41 @@ main {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+}
+
+.current-media-header {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.current-media-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.current-media-title {
+  flex: 1 1 320px;
+  min-width: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.current-media-badge {
+  margin-top: 0.15rem;
+}
+
+.current-title-progress {
+  height: 5px;
 }
 
 
