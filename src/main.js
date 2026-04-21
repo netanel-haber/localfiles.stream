@@ -290,6 +290,8 @@ function getFileProgressPercent(file) {
 }
 
 // Initialize IndexedDB
+const MAX_FILE_SIZE = 1000 * 1024 * 1024;
+
 function initDB() {
   return new Promise((resolve, reject) => {
     // Check for storage availability first
@@ -370,53 +372,28 @@ function dbOperation(db, storeName, mode, operation) {
   });
 }
 
-// IndexedDB Blob Storage Helper Functions
-const storeFileBlob = (db, fileId, fileBlob) =>
-  dbOperation(db, "mediaFiles", "readwrite", store => store.put({ id: fileId, blob: fileBlob }));
+function mediaFilesStore(db, mode, operation) {
+  return dbOperation(db, "mediaFiles", mode, operation);
+}
 
-const retrieveFileBlob = (db, fileId) =>
-  dbOperation(db, "mediaFiles", "readonly", store => store.get(fileId))
-    .then(result => result ? result.blob : null);
-
-const removeFileBlob = (db, fileId) =>
-  dbOperation(db, "mediaFiles", "readwrite", store => store.delete(fileId));
-
-const clearAllFileBlobs = (db) =>
-  dbOperation(db, "mediaFiles", "readwrite", store => store.clear());
-
-// Shared Files Helper Functions
-const retrieveSharedFiles = (db) =>
-  dbOperation(db, "sharedFiles", "readonly", store => store.getAll())
-    .then(result => result || []);
-
-const clearSharedFiles = (db) =>
-  dbOperation(db, "sharedFiles", "readwrite", store => store.clear());
+function sharedFilesStore(db, mode, operation) {
+  return dbOperation(db, "sharedFiles", mode, operation);
+}
 
 // Process shared files and add them to the main media library
 async function processSharedFiles() {
   try {
     const db = await initDB();
-    const sharedFiles = await retrieveSharedFiles(db);
-
-    if (sharedFiles.length > 0) {
-      console.log(`Found ${sharedFiles.length} shared files to process`);
-
-      // Convert shared files to the format expected by addFiles
-      const filesToAdd = sharedFiles.map(sharedFile => sharedFile.file);
-
-      // Add files to the main library
-      await addFiles(filesToAdd);
-
-      // Clear shared files after processing
-      await clearSharedFiles(db);
-
-      // Show notification
-      alert(`${sharedFiles.length} shared file(s) added to your library!`);
-
-      return true;
+    const sharedFiles = await sharedFilesStore(db, "readonly", (store) => store.getAll()).then((result) => result || []);
+    if (!sharedFiles.length) {
+      return false;
     }
 
-    return false;
+    console.log(`Found ${sharedFiles.length} shared files to process`);
+    await addFiles(sharedFiles.map((sharedFile) => sharedFile.file));
+    await sharedFilesStore(db, "readwrite", (store) => store.clear());
+    alert(`${sharedFiles.length} shared file(s) added to your library!`);
+    return true;
   } catch (error) {
     handleError(error);
     return false;
@@ -452,114 +429,94 @@ function saveMetadataToLocalStorage(metadataArray) {
   }
 }
 
+async function loadStoredMediaFile(db, meta) {
+  try {
+    const fileRecord = await mediaFilesStore(db, "readonly", (store) => store.get(meta.id));
+    if (!fileRecord?.blob) {
+      console.warn(`Blob not found in IndexedDB for file ID: ${meta.id}. Skipping file.`);
+      return null;
+    }
+
+    return normalizeMediaFileRecord({ ...meta, file: fileRecord.blob });
+  } catch (error) {
+    handleError(error);
+    return null;
+  }
+}
+
+function createMediaFileRecord(file, index) {
+  const fileId = `file-${Date.now()}-${index}`;
+  return normalizeMediaFileRecord({
+    id: fileId,
+    name: file.name || `shared-file-${Date.now()}-${index}.${file.type.split("/")[1] || "bin"}`,
+    type: file.type,
+    size: file.size,
+    file,
+    progress: 0,
+    duration: 0,
+    isNew: true,
+    interactedAt: null,
+    dateAdded: new Date().toISOString(),
+  });
+}
+
 // Load data (Refactored)
 const loadData = async () => {
+  isLoading.val = true;
   try {
-    isLoading.val = true;
     console.log("Loading data...");
     const db = await initDB();
     const metadataArray = getMetadataFromLocalStorage();
     console.log(`Loaded ${metadataArray.length} metadata entries from Local Storage.`);
+    const filesWithBlobs = await Promise.all(metadataArray.map((meta) => loadStoredMediaFile(db, meta)));
 
-    const filesWithBlobs = [];
-    for (const meta of metadataArray) {
-      try {
-        const blob = await retrieveFileBlob(db, meta.id);
-        if (blob) {
-          filesWithBlobs.push(normalizeMediaFileRecord({ ...meta, file: blob }));
-        } else {
-          console.warn(`Blob not found in IndexedDB for file ID: ${meta.id}. Skipping file.`);
-        }
-      } catch (error) {
-        handleError(error);
-      }
-    }
-
-    mediaFiles.val = [...filesWithBlobs]; // Force reactivity
+    mediaFiles.val = filesWithBlobs.filter(Boolean);
     console.log(`Updated mediaFiles state with ${filesWithBlobs.length} files.`);
-    isLoading.val = false;
     return mediaFiles.val;
   } catch (error) {
     handleError(error);
-    isLoading.val = false;
     return [];
+  } finally {
+    isLoading.val = false;
   }
 };
 
 // Much simpler file handling function (Refactored)
 async function addFiles(files) {
-  // Made async
-  const MAX_FILE_SIZE = 1000 * 1024 * 1024; // 1000MB limit
-
   if (!files || files.length === 0) {
     console.error("No files selected");
     return;
   }
 
-  // Force remove any previous loading indicator
   document.body.className = document.body.className.replace("is-uploading", "");
-
-  // Create temporary array
   const newFiles = [];
-  const db = await initDB(); // Initialize DB connection once
+  const db = await initDB();
 
-  // Process each file
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const fileName = file.name || `shared-file-${Date.now()}-${i}.${file.type.split('/')[1] || 'bin'}`;
-    console.log(`Processing file ${i + 1}/${files.length}: ${fileName}`);
-
-    // Skip files that are too large
+  for (const [index, file] of Array.from(files).entries()) {
+    const newFile = createMediaFileRecord(file, index);
+    console.log(`Processing file ${index + 1}/${files.length}: ${newFile.name}`);
     if (file.size > MAX_FILE_SIZE) {
-      alert(`File ${fileName} exceeds the 1000MB size limit.`);
+      alert(`File ${newFile.name} exceeds the 1000MB size limit.`);
       continue;
     }
 
-    // Create a unique ID for this file
-    const fileId = `file-${Date.now()}-${i}`;
-
-    // Create the file object with just the essential info
-    const newFile = normalizeMediaFileRecord({
-      id: fileId,
-      name: fileName,
-      type: file.type,
-      size: file.size,
-      file: file, // Store the actual file object
-      progress: 0,
-      duration: 0,
-      isNew: true,
-      interactedAt: null,
-      dateAdded: new Date().toISOString(),
-    });
-
-    // Store the blob in IndexedDB
     try {
-      await storeFileBlob(db, newFile.id, newFile.file);
+      await mediaFilesStore(db, "readwrite", (store) => store.put({ id: newFile.id, blob: newFile.file }));
       console.log(`Blob for ${newFile.name} stored in IndexedDB.`);
-      newFiles.push(newFile); // Add to array only if blob storage is successful
+      newFiles.push(newFile);
     } catch (error) {
       handleError(error);
       alert(`Could not save file ${newFile.name} due to a storage error.`);
-      continue; // Skip this file
     }
-    console.log(`File ${fileName} processed successfully`);
+    console.log(`File ${newFile.name} processed successfully`);
   }
 
-  // Update the state with all new files at once
   if (newFiles.length > 0) {
     console.log(`Adding ${newFiles.length} files to the library`);
-
-    const updatedFiles = [...mediaFiles.val, ...newFiles];
-    saveMediaFiles(updatedFiles);
+    saveMediaFiles([...mediaFiles.val, ...newFiles]);
     console.log("File metadata saved to Local Storage.");
-
-    // Open the sidebar
     sidebarOpen.val = true;
-
-    // Show confirmation
     alert(`${newFiles.length} files uploaded successfully!`);
-
-    // Play the first new file
     setTimeout(() => {
       playFile(newFiles[0], { markInteracted: true });
     }, 500);
@@ -567,44 +524,79 @@ async function addFiles(files) {
 }
 
 // Add a dedicated function to play files
+function getMediaPlayer() {
+  return document.getElementById("media-player");
+}
+
+function showPlayerContainer() {
+  const videoContainer = document.getElementById("video-container");
+  if (videoContainer) {
+    videoContainer.style.display = "block";
+  }
+
+  const uploadPrompt = document.querySelector(".upload-prompt");
+  if (uploadPrompt) {
+    uploadPrompt.style.display = "none";
+  }
+}
+
+function resolvePlayableSource(file) {
+  if (file.file && file.file instanceof Blob) {
+    return createAndTrackObjectURL(file);
+  }
+  if (file.data && typeof file.data === "string") {
+    return file.data;
+  }
+  return null;
+}
+
+function setLastPlayedFileId(fileId) {
+  try {
+    if (fileId) {
+      localStorage.setItem(LAST_PLAYED_FILE_ID_KEY, fileId);
+    } else {
+      localStorage.removeItem(LAST_PLAYED_FILE_ID_KEY);
+    }
+  } catch (error) {
+    console.warn("Could not update lastPlayedFileId in Local Storage:", error);
+  }
+}
+
+function getLastPlayedFileId() {
+  try {
+    return localStorage.getItem(LAST_PLAYED_FILE_ID_KEY);
+  } catch (error) {
+    console.warn("Could not read lastPlayedFileId from Local Storage:", error);
+    return null;
+  }
+}
+
+function releaseAllObjectURLs() {
+  objectUrls.forEach((url) => {
+    URL.revokeObjectURL(url);
+  });
+  objectUrls.clear();
+}
+
 function playFile(file, { markInteracted = false } = {}) {
   console.log("Attempting to play file:", file);
 
   try {
-    const player = document.getElementById("media-player");
+    const player = getMediaPlayer();
     if (!player) {
       console.error("Media player element not found");
       alert("Media player not found. Please refresh the page.");
       return;
     }
 
-    // Make sure video container is visible
-    const videoContainer = document.getElementById("video-container");
-    if (videoContainer) {
-      videoContainer.style.display = "block";
-    }
-
-    // Hide the upload prompt
-    const uploadPrompt = document.querySelector(".upload-prompt");
-    if (uploadPrompt) {
-      uploadPrompt.style.display = "none";
-    }
-
-    // Get or create a URL for the file
-    let sourceUrl;
-    if (file.file && file.file instanceof Blob) {
-      // Create a tracked object URL
-      sourceUrl = createAndTrackObjectURL(file);
-    } else if (file.data && typeof file.data === "string") {
-      // Use existing data URL or blob URL
-      sourceUrl = file.data;
-    } else {
+    const sourceUrl = resolvePlayableSource(file);
+    if (!sourceUrl) {
       console.error("File has no playable source:", file);
       alert(`Cannot play ${file.name || "file"}: Invalid source format`);
       return;
     }
 
-    // Set the source
+    showPlayerContainer();
     console.log(`Setting player source to: ${sourceUrl}`);
     if (markInteracted) {
       markFileInteracted(file.id);
@@ -613,30 +605,22 @@ function playFile(file, { markInteracted = false } = {}) {
     player.src = sourceUrl;
     player.setAttribute("data-current-file-id", file.id); // Tag player with file ID
 
-    // Set the time if available
     if (typeof file.progress === "number") {
       player.currentTime = file.progress;
     }
 
-    // Close sidebar on mobile
     if (window.innerWidth < 768) {
       sidebarOpen.val = false;
     }
 
-    // Force play with a slight delay
     setTimeout(() => {
       const playPromise = player.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
             console.log(`Playing ${file.name || "file"} successfully`);
-            // Store this as the last played file
-            try {
-              localStorage.setItem("lastPlayedFileId", file.id);
-              console.log(`Set lastPlayedFileId to: ${file.id}`);
-            } catch (e) {
-              console.warn("Could not save lastPlayedFileId to Local Storage:", e);
-            }
+            setLastPlayedFileId(file.id);
+            console.log(`Set lastPlayedFileId to: ${file.id}`);
           })
           .catch(console.error);
       }
@@ -656,7 +640,7 @@ function clearCurrentFileSelection(fileId = currentFileId.val) {
     currentFileId.val = null;
   }
 
-  const player = document.getElementById("media-player");
+  const player = getMediaPlayer();
   if (player?.getAttribute("data-current-file-id") === fileId) {
     player.pause();
     player.removeAttribute("data-current-file-id");
@@ -669,12 +653,8 @@ function clearCurrentFileSelection(fileId = currentFileId.val) {
     videoContainer.style.display = "none";
   }
 
-  try {
-    if (localStorage.getItem("lastPlayedFileId") === fileId) {
-      localStorage.removeItem("lastPlayedFileId");
-    }
-  } catch (error) {
-    console.warn("Could not update lastPlayedFileId in Local Storage:", error);
+  if (getLastPlayedFileId() === fileId) {
+    setLastPlayedFileId(null);
   }
 }
 
@@ -689,7 +669,7 @@ async function deleteFile(id) {
   // Remove blob from IndexedDB
   try {
     const db = await initDB();
-    await removeFileBlob(db, id);
+    await mediaFilesStore(db, "readwrite", (store) => store.delete(id));
     console.log(`Blob for file ID ${id} removed from IndexedDB.`);
   } catch (error) {
     handleError(error);
@@ -717,15 +697,12 @@ async function confirmDeleteAll() {
   clearCurrentFileSelection();
 
   // Release all object URLs
-  objectUrls.forEach((url, id) => {
-    URL.revokeObjectURL(url);
-  });
-  objectUrls.clear();
+  releaseAllObjectURLs();
 
   // Clear blobs from IndexedDB
   try {
     const db = await initDB();
-    await clearAllFileBlobs(db);
+    await mediaFilesStore(db, "readwrite", (store) => store.clear());
     console.log("All file blobs cleared from IndexedDB.");
   } catch (error) {
     handleError(error);
@@ -764,7 +741,80 @@ function updateProgress(id, currentTime) {
   updateMediaFile(id, (file) => ({ ...file, progress: currentTime }));
 }
 
-// Components
+function renderTitleProgress(file, titleClass, rowClass, trackClass, badgeClass = "new-badge") {
+  return [
+    div(
+      { class: rowClass },
+      span({ class: titleClass }, file.name || "Unnamed File"),
+      file.isNew ? span({ class: badgeClass }, "New") : null,
+    ),
+    div(
+      { class: trackClass, "aria-hidden": "true" },
+      span(
+        {
+          class: "title-progress-fill",
+          style: `width: ${getFileProgressPercent(file).toFixed(2)}%`,
+        },
+      ),
+    ),
+  ];
+}
+
+function playFromSidebar(file) {
+  console.log("Clicked on file:", file);
+  playFile(file, { markInteracted: true });
+}
+
+function renderSidebarItem(file, activeFileId) {
+  return li(
+    {
+      class: `file-item${activeFileId === file.id ? " is-current" : ""}`,
+      "data-id": file.id,
+    },
+    div(
+      {
+        class: "file-entry",
+        role: "button",
+        tabindex: 0,
+        onclick: () => {
+          playFromSidebar(file);
+        },
+        onkeydown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            playFromSidebar(file);
+          }
+        },
+      },
+      ...renderTitleProgress(file, "file-name", "file-title-row", "title-progress-track"),
+    ),
+    button(
+      {
+        class: "delete-btn outline",
+        onclick: (e) => {
+          e.stopPropagation();
+          console.log(`Deleting file: ${file.id}`);
+          deleteFile(file.id);
+        },
+      },
+      "×",
+    ),
+  );
+}
+
+function withCurrentPlayerFile(handler) {
+  return (e) => {
+    const fileId = e.target.getAttribute("data-current-file-id");
+    if (fileId) {
+      handler(fileId, e.target);
+    }
+  };
+}
+
+function clearTrackedPlayerFile(player) {
+  player.removeAttribute("data-current-file-id");
+}
+
 function Sidebar() {
   return aside(
     {
@@ -783,58 +833,7 @@ function Sidebar() {
           {},
           ul(
             {},
-            ...mediaFiles.val.map((file) => {
-              const displayName = file.name || "Unnamed File";
-
-              return li(
-                {
-                  class: `file-item${activeFileId === file.id ? " is-current" : ""}`,
-                  "data-id": file.id,
-                },
-                div(
-                  {
-                    class: "file-entry",
-                    role: "button",
-                    tabindex: 0,
-                    onclick: () => {
-                      console.log("Clicked on file:", file);
-                      playFile(file, { markInteracted: true });
-                    },
-                    onkeydown: (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        playFile(file, { markInteracted: true });
-                      }
-                    },
-                  },
-                  div(
-                    { class: "file-title-row" },
-                    span({ class: "file-name" }, displayName),
-                    file.isNew ? span({ class: "new-badge" }, "New") : null,
-                  ),
-                  div(
-                    { class: "title-progress-track", "aria-hidden": "true" },
-                    span(
-                      {
-                        class: "title-progress-fill",
-                        style: `width: ${getFileProgressPercent(file).toFixed(2)}%`,
-                      },
-                    ),
-                  ),
-                ),
-                button(
-                  {
-                    class: "delete-btn outline",
-                    onclick: (e) => {
-                      e.stopPropagation();
-                      console.log(`Deleting file: ${file.id}`);
-                      deleteFile(file.id);
-                    },
-                  },
-                  "×",
-                ),
-              );
-            }),
+            ...mediaFiles.val.map((file) => renderSidebarItem(file, activeFileId)),
           ),
           button(
             {
@@ -948,19 +947,12 @@ function MediaPlayer() {
 
         return div(
           { class: "current-media-header" },
-          div(
-            { class: "current-media-title-row" },
-            span({ class: "current-media-title" }, currentFile.name || "Unnamed File"),
-            currentFile.isNew ? span({ class: "new-badge current-media-badge" }, "New") : null,
-          ),
-          div(
-            { class: "title-progress-track current-title-progress", "aria-hidden": "true" },
-            span(
-              {
-                class: "title-progress-fill",
-                style: `width: ${getFileProgressPercent(currentFile).toFixed(2)}%`,
-              },
-            ),
+          ...renderTitleProgress(
+            currentFile,
+            "current-media-title",
+            "current-media-title-row",
+            "title-progress-track current-title-progress",
+            "new-badge current-media-badge",
           ),
         );
       }),
@@ -996,35 +988,25 @@ function MediaPlayer() {
             preload: "auto",
             controlsList: "nodownload",
             playsinline: true,
-            onloadedmetadata: (e) => {
-              const fileId = e.target.getAttribute("data-current-file-id");
-              if (fileId) {
-                updateDuration(fileId, e.target.duration);
-              }
-            },
-            ondurationchange: (e) => {
-              const fileId = e.target.getAttribute("data-current-file-id");
-              if (fileId) {
-                updateDuration(fileId, e.target.duration);
-              }
-            },
-            ontimeupdate: (e) => {
-              const fileId = e.target.getAttribute("data-current-file-id");
-              if (fileId) {
-                updateProgress(fileId, e.target.currentTime);
-              }
-            },
-            onplay: (e) => {
-              console.log("Media started playing. File ID:", e.target.getAttribute("data-current-file-id"));
-            },
-            onended: (e) => {
+            onloadedmetadata: withCurrentPlayerFile((fileId, player) => {
+              updateDuration(fileId, player.duration);
+            }),
+            ondurationchange: withCurrentPlayerFile((fileId, player) => {
+              updateDuration(fileId, player.duration);
+            }),
+            ontimeupdate: withCurrentPlayerFile((fileId, player) => {
+              updateProgress(fileId, player.currentTime);
+            }),
+            onplay: withCurrentPlayerFile((fileId) => {
+              console.log("Media started playing. File ID:", fileId);
+            }),
+            onended: withCurrentPlayerFile((fileId, player) => {
               console.log("Media ended. Saving final progress.");
-              const fileId = e.target.getAttribute("data-current-file-id");
-              if (fileId && e.target.duration && Number.isFinite(e.target.duration)) {
-                updateProgress(fileId, e.target.duration); // Save final position as full duration
+              if (player.duration && Number.isFinite(player.duration)) {
+                updateProgress(fileId, player.duration);
               }
-              e.target.removeAttribute("data-current-file-id"); // Clean up
-            },
+              clearTrackedPlayerFile(player);
+            }),
             onerror: (e) => {
               console.error("Media player error:", e.target.error);
               alert(`Error playing media: ${e.target.error ? e.target.error.message : "Unknown error"}`);
@@ -1032,7 +1014,7 @@ function MediaPlayer() {
               if (fileId && currentFileId.val === fileId) {
                 currentFileId.val = null;
               }
-              e.target.removeAttribute("data-current-file-id"); // Clean up
+              clearTrackedPlayerFile(e.target);
             },
           }),
         ),
@@ -1138,81 +1120,60 @@ function App() {
   );
 }
 
+function clearLaunchParams() {
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+async function handleLaunchState() {
+  const urlParams = new URLSearchParams(window.location.search);
+
+  if (urlParams.get("error") === "share_failed") {
+    const shareError = new Error(urlParams.get("error_msg") || "Failed to share files");
+    shareError.name = urlParams.get("error_name") || "ShareError";
+    displayError(shareError, {
+      message: "Service worker share handler failed",
+      context: "Android share operation"
+    });
+    clearLaunchParams();
+    return;
+  }
+
+  await processSharedFiles();
+  if (urlParams.get("shared") === "true") {
+    clearLaunchParams();
+  }
+}
+
+function restoreLastPlayedFile() {
+  if (mediaFiles.val.length === 0) {
+    return;
+  }
+
+  const lastPlayedFileId = getLastPlayedFileId();
+  if (!lastPlayedFileId) {
+    return;
+  }
+
+  const fileToPlay = mediaFiles.val.find((f) => f.id === lastPlayedFileId);
+  if (fileToPlay) {
+    console.log("Attempting to autoplay last played file:", fileToPlay);
+    playFile(fileToPlay, { markInteracted: true });
+  } else {
+    console.log("Last played file ID found, but file not in current media list.");
+  }
+}
+
 // Initialize app
 (async () => {
-  // Clear IndexedDB and LocalStorage in development mode
-  const isDevelopment = import.meta.env.DEV;
-
   try {
-    // Force isLoading to be true at start
     isLoading.val = true;
-
-    // Mount the app first
     console.log("Mounting app...");
     van.add(document.getElementById("app"), App());
-
-    // Now load data
-    await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay to ensure DOM is ready
-
-    console.log("Loading data...");
+    await new Promise((resolve) => setTimeout(resolve, 100));
     await loadData();
-
-    // Check for shared files (from Web Share Target API)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('shared') === 'true') {
-      console.log("App opened with shared files, processing...");
-      await processSharedFiles();
-      // Clean up URL parameters
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (urlParams.get('error') === 'share_failed') {
-      console.error("Share operation failed");
-
-      // Get error details from URL params
-      const errorMsg = urlParams.get('error_msg');
-      const errorName = urlParams.get('error_name');
-
-      // Create a detailed error to display
-      const shareError = new Error(errorMsg || 'Failed to share files');
-      shareError.name = errorName || 'ShareError';
-
-      // Display the error on screen
-      displayError(shareError, {
-        message: 'Service worker share handler failed',
-        context: 'Android share operation'
-      });
-
-      // Clean up URL parameters
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-      // Check for shared files anyway (in case URL params were missed)
-      await processSharedFiles();
-    }
-
+    await handleLaunchState();
     console.log(`App initialized with ${mediaFiles.val.length} files`);
-
-    // Attempt to play the last played file
-    if (mediaFiles.val.length > 0) {
-      try {
-        const lastPlayedFileId = localStorage.getItem("lastPlayedFileId");
-        if (lastPlayedFileId) {
-          console.log(`Found lastPlayedFileId: ${lastPlayedFileId}`);
-          const fileToPlay = mediaFiles.val.find((f) => f.id === lastPlayedFileId);
-          if (fileToPlay) {
-            console.log("Attempting to autoplay last played file:", fileToPlay);
-            playFile(fileToPlay, { markInteracted: true });
-          } else {
-            console.log("Last played file ID found, but file not in current media list.");
-          }
-        }
-      } catch (e) {
-        console.warn("Could not retrieve or play lastPlayedFileId:", e);
-      }
-    }
-
-    // Make sure UI is updated
-    if (mediaFiles.val.length > 0) {
-      console.log("Files found, showing sidebar");
-    }
+    restoreLastPlayedFile();
   } catch (error) {
     handleError(error);
     isLoading.val = false;
