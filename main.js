@@ -780,7 +780,7 @@ function Sidebar() {
 
       if (mediaFiles.val.length > 0) {
         return div(
-          {},
+          { class: "sidebar-body" },
           ul(
             {},
             ...mediaFiles.val.map((file) => {
@@ -845,7 +845,7 @@ function Sidebar() {
           ),
         );
       }
-      return div({ class: "empty-message" }, "No files added yet");
+      return div({ class: "sidebar-body" }, div({ class: "empty-message" }, "No files added yet"));
     }),
     div(
       { class: "sidebar-footer" },
